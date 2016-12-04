@@ -1,0 +1,5 @@
+[package]
+
+name = "rustnish"
+version = "0.0.1"
+authors = [ "Klaus Purer <klaus.purer@gmail.com>" ]
