@@ -1,20 +1,25 @@
 extern crate hyper;
 
 use hyper::Client;
-use std::io::Read;
+use hyper::server::{Server, Request, Response};
+use std::io;
 
 fn main() {
+    let server = Server::http("127.0.0.1:9090").unwrap();
+    // If a function returns something in Rust you can't ignore it, so we need this superflous
+    // unused variable here. Starting it with "_" tells the compiler to ignore it.
+    let _guard = server.handle(pipe_through);
+    println!("Listening on http://127.0.0.1:9090");
+}
+
+fn pipe_through(request: Request, mut response: Response) {
     let client = Client::new();
-    // Why does the response have to be mutable here? We never need to modify it, so we should be
-    // able to remove "mut"?
-    let mut response = client.get("http://drupal-8.localhost/").send().unwrap();
-    // Print out all the headers first.
-    for header in response.headers.iter() {
-        println!("{}", header);
-    }
-    // Now the body. This is ugly, why do I have to create an intermediary string variable? I want
-    // to push the response directly to stdout.
-    let mut body = String::new();
-    response.read_to_string(&mut body).unwrap();
-    print!("{}", body);
+    // I think the upstream response needs to be mutable because we consume the body further down?
+    let mut upstream_response = client.get("http://drupal-8.localhost/").send().unwrap();
+    *response.status_mut() = upstream_response.status;
+    // Cloning is quite useless here, we actually just want to move the headers. But how?
+    *response.headers_mut() = upstream_response.headers.clone();
+
+    // Forward the body of the upstream response in our response body.
+    io::copy(&mut upstream_response, &mut response.start().unwrap()).unwrap();
 }
