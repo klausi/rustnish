@@ -14,7 +14,7 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 title: rustnish
-email: klaus.purer@gmail.com
+author: klausi
 description: "Experimenting with Rustlang by writing a reverse proxy"
 baseurl: "/rustnish" # the subpath of your site, e.g. /blog
 url: "https://klausi.github.io" # the base hostname & protocol for your site, e.g. http://example.com
