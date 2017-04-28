@@ -23,7 +23,7 @@ github_username:  klausi
 
 # Build settings
 markdown: kramdown
-theme: jekyll-theme-hacker
+theme: minima
 gems:
   - jekyll-feed
 exclude:
