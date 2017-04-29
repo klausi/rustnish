@@ -25,7 +25,11 @@ fn pipe_through(request: Request, mut response: Response) {
         RequestUri::Star => "*".to_string(),
     };
     let host = match request.headers.get::<Host>() {
-        None => return error_page("No host header in request".to_string(), StatusCode::BadRequest, response),
+        None => {
+            return error_page("No host header in request".to_string(),
+                              StatusCode::BadRequest,
+                              response)
+        }
         Some(h) => h,
     };
     let hostname = host.hostname.to_string();
@@ -36,17 +40,21 @@ fn pipe_through(request: Request, mut response: Response) {
     let url_string = protocol + &hostname + &path;
     let url = match url_string.into_url() {
         Ok(u) => u,
-        Err(e) => return error_page(
-            format!("Error parsing Host header '{}': {}", url_string, e.description()),
-            StatusCode::InternalServerError,
-            response),
+        Err(e) => {
+            return error_page(format!("Error parsing Host header '{}': {}",
+                                      url_string,
+                                      e.description()),
+                              StatusCode::InternalServerError,
+                              response)
+        }
     };
 
     // @todo Add proxy config so that requests always go to localhost and this is not an open
     // relay.
     let client = Client::new();
 
-    let request_builder = client.request(request.method, url)
+    let request_builder = client
+        .request(request.method, url)
         .headers(request.headers.clone());
     let mut upstream_response = request_builder.send().unwrap();
     *response.status_mut() = upstream_response.status;
