@@ -300,3 +300,5 @@ exactly right to be productive fairly quickly.
 
 Stay tuned for future blog posts where I plan to explore Configuration file
 handling, Automated Testing, Structuring larger programs, Benchmarking and more.
+
+Please comment [in the Github issue queue](https://github.com/klausi/rustnish/issues).
