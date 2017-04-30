@@ -38,6 +38,8 @@ instructions](https://www.rust-lang.org/en-US/install.html):
 ```
 curl https://sh.rustup.rs -sSf | sh
 ```
+(the usual security warning: make sure to trust your sources before you execute
+ random scripts from the internet.)
 
 That single script installs all rust command line utilities you need into your
 home directory thereby not messing up your global Ubuntu system (yay!). It
