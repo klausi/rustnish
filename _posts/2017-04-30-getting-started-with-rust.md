@@ -82,6 +82,9 @@ language itself!
 
 ## Picking an editor
 
+**Update: [New blog post about choosing Eclipse for Rust]({{ site.baseurl }}{% post_url 2017-05-06-using-eclipse-ide-for-rust-on-ubuntu %})
+because of better IDE support.**
+
 [areweideyet.com](https://areweideyet.com/) lists editors and Integrated
 Development Environments (IDE) for Rust. I chose [Atom](https://atom.io/)
 because it seems to have the most IDE features. Make sure to install all the
