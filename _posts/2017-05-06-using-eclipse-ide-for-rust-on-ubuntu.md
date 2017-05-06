@@ -105,4 +105,3 @@ configuration, but I think it is totally worth it to be more productive when
 writing Rust. Eclipse works better for me than Atom Editor. I also filed a
 [pull request to update the available Eclipse features on
 areweideyet.com](https://github.com/contradictioned/areweideyet/pull/46).
-
