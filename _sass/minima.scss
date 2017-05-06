@@ -61,3 +61,11 @@ $on-laptop:        800px !default;
   float: right;
   margin: 1em 0;
 }
+
+.site-logo img {
+  max-height: 70px;
+}
+
+a.site-title {
+  float: none;
+}
