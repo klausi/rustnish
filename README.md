@@ -2,7 +2,7 @@
 Experimental project to learn Rust. A reverse proxy.
 
 ## Goal 1: Just pipe HTTP requests through
-Completed: no
+Completed: yes
 
 A webserver like Apache is listening on port 80. Write a reverse proxy service
 that does nothing but forwarding HTTP requests to port 80. The service must
