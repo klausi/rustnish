@@ -2,7 +2,7 @@ extern crate hyper;
 
 use hyper::Client;
 use hyper::client::IntoUrl;
-use hyper::server::{Server, Request, Response};
+use hyper::server::{Server, Request, Response, Listening};
 use hyper::uri::RequestUri;
 use hyper::header::Host;
 use std::error::Error;
@@ -10,11 +10,20 @@ use hyper::status::StatusCode;
 use std::io;
 
 fn main() {
-    let server = Server::http("127.0.0.1:9090").unwrap();
+    let port: u16 = 9090;
     // If a function returns something in Rust you can't ignore it, so we need this superflous
     // unused variable here. Starting it with "_" tells the compiler to ignore it.
-    let _guard = server.handle(pipe_through);
-    println!("Listening on http://127.0.0.1:9090");
+    let _listening = start_server(port);
+}
+
+fn start_server(port: u16) -> Listening {
+    let address = "127.0.0.1:".to_owned() + &port.to_string();
+    let server = Server::http(&address).unwrap();
+    // If a function returns something in Rust you can't ignore it, so we need this superflous
+    // unused variable here. Starting it with "_" tells the compiler to ignore it.
+    let guard = server.handle(pipe_through);
+    println!("Listening on {}", address);
+    return guard.unwrap();
 }
 
 fn pipe_through(request: Request, mut response: Response) {
