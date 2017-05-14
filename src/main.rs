@@ -1,3 +1,9 @@
+// We always want to run Clippy on this code and have it as a dependency. Don't
+// do this for real Rust applications.
+#![deny(warnings)]
+#![feature(plugin)]
+#![plugin(clippy)]
+
 extern crate hyper;
 
 use hyper::Client;
@@ -23,19 +29,22 @@ fn start_server(port: u16) -> Listening {
     // unused variable here. Starting it with "_" tells the compiler to ignore it.
     let guard = server.handle(pipe_through);
     println!("Listening on {}", address);
-    return guard.unwrap();
+
+    guard.unwrap()
 }
 
 fn pipe_through(request: Request, mut response: Response) {
+
+
     let path = match request.uri {
-        RequestUri::AbsolutePath(p) => p,
-        RequestUri::AbsoluteUri(url) => url.path().to_string(),
+        RequestUri::AbsolutePath(p) |
         RequestUri::Authority(p) => p,
+        RequestUri::AbsoluteUri(url) => url.path().to_string(),
         RequestUri::Star => "*".to_string(),
     };
     let host = match request.headers.get::<Host>() {
         None => {
-            return error_page("No host header in request".to_string(),
+            return error_page("No host header in request",
                               StatusCode::BadRequest,
                               response)
         }
@@ -50,9 +59,9 @@ fn pipe_through(request: Request, mut response: Response) {
     let url = match url_string.into_url() {
         Ok(u) => u,
         Err(e) => {
-            return error_page(format!("Error parsing Host header '{}': {}",
-                                      url_string,
-                                      e.description()),
+            return error_page(&format!("Error parsing Host header '{}': {}",
+                                       url_string,
+                                       e.description()),
                               StatusCode::InternalServerError,
                               response)
         }
@@ -77,7 +86,7 @@ fn pipe_through(request: Request, mut response: Response) {
 /**
  * Sets an error response.
  */
-fn error_page(message: String, http_code: StatusCode, mut response: Response) {
+fn error_page(message: &str, http_code: StatusCode, mut response: Response) {
     println!("{}", message);
     *response.status_mut() = http_code;
     // @todo set response body with the message.

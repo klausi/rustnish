@@ -5,3 +5,5 @@ authors = [ "Klaus Purer <klaus.purer@gmail.com>" ]
 
 [dependencies]
 hyper = "0.10.10"
+# Clippy gives us advanced compiler complaints, required Rust nightly.
+clippy = "*"
