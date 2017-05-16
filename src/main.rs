@@ -25,12 +25,10 @@ fn main() {
 fn start_server(port: u16) -> Listening {
     let address = "127.0.0.1:".to_owned() + &port.to_string();
     let server = Server::http(&address).unwrap();
-    // If a function returns something in Rust you can't ignore it, so we need this superflous
-    // unused variable here. Starting it with "_" tells the compiler to ignore it.
-    let guard = server.handle(pipe_through);
+    let listening = server.handle(pipe_through).unwrap();
     println!("Listening on {}", address);
 
-    guard.unwrap()
+    listening
 }
 
 fn pipe_through(request: Request, mut response: Response) {
