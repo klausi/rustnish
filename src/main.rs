@@ -4,13 +4,13 @@
 #![feature(plugin)]
 #![plugin(clippy)]
 
-extern crate hyper;
 extern crate rustnish;
 
 
 fn main() {
     let port: u16 = 9090;
+    let upstream_port: u16 = 80;
     // If a function returns something in Rust you can't ignore it, so we need this superflous
     // unused variable here. Starting it with "_" tells the compiler to ignore it.
-    let _listening = rustnish::start_server(port);
+    let _listening = rustnish::start_server(port, upstream_port);
 }

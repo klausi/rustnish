@@ -2,23 +2,37 @@ extern crate hyper;
 
 use hyper::Client;
 use hyper::client::IntoUrl;
-use hyper::server::{Server, Request, Response, Listening};
+use hyper::server::{Server, Request, Response, Listening, Handler};
 use hyper::uri::RequestUri;
 use hyper::header::Host;
 use std::error::Error;
 use hyper::status::StatusCode;
 use std::io;
 
-pub fn start_server(port: u16) -> Listening {
+// We need to define a handler because we need to pass in an upstream port
+// number the HTTP client will connect to.
+struct ProxyHandler {
+    upstream_port: u16,
+}
+
+impl Handler for ProxyHandler {
+    fn handle(&self, request: Request, response: Response) {
+        pipe_through(request, response, self.upstream_port);
+    }
+}
+
+pub fn start_server(port: u16, upstream_port: u16) -> Listening {
     let address = "127.0.0.1:".to_owned() + &port.to_string();
     let server = Server::http(&address).unwrap();
-    let listening = server.handle(pipe_through).unwrap();
+    let listening = server
+        .handle(ProxyHandler { upstream_port: upstream_port })
+        .unwrap();
     println!("Listening on {}", address);
 
     listening
 }
 
-fn pipe_through(request: Request, mut response: Response) {
+fn pipe_through(request: Request, mut response: Response, upstream_port: u16) {
 
 
     let path = match request.uri {
@@ -40,7 +54,7 @@ fn pipe_through(request: Request, mut response: Response) {
     // concatenates 3 strings we first have to allocate memory by making the first variable a
     // string.
     let protocol = "http://".to_string();
-    let url_string = protocol + &hostname + &path;
+    let url_string = protocol + &hostname + ":" + &upstream_port.to_string() + &path;
     let url = match url_string.into_url() {
         Ok(u) => u,
         Err(e) => {
