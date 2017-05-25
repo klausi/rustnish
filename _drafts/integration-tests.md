@@ -108,7 +108,7 @@ All green, tests are passing the first time! The output is a bit long and confus
 
 That way the cargo test runner lets you know passive aggressively that you should write all these kind of tests :-)
 
-Of course we are not testing anything useful yet - let's exapnd the test case.
+Of course we are not testing anything useful yet - let's expand the test case.
 
 ## Integration tests for a Hyper server
 
@@ -118,4 +118,54 @@ The main idea for our integration test is this:
 2. Start our reverse proxy configured to forward requests to the dummy backend server.
 3. Make a request to our proxy and assert that we get the response as mocked by the dummy backend server.
 
-That way we can make sure that the response is passed through correctly and our reverse proxy works.
+That way we can make sure that the response is passed through correctly and our reverse proxy works. You can find the whole [test source code on Github](https://github.com/klausi/rustnish/blob/goal-02/tests/integration_tests.rs), let's examine the parts of the test:
+
+```rust
+#[test]
+fn test_pass_through() {
+    let port = 9090;
+    let upstream_port = 9091;
+
+    let mut dummy_server = Server::http("127.0.0.1:".to_string() + &upstream_port.to_string())
+        .unwrap()
+        .handle(|_: Request, response: Response| { response.send(b"hello").unwrap(); })
+        .unwrap();
+```
+
+This starts the dummy server that simply responds with a "hello" response to any request it receives. The actual request handling is done in a [Rust closure](https://doc.rust-lang.org/book/closures.html) (anonymous function) which is expressed by the two pipes ```|```. Easy, expressive and powerful - thanks Hyper!
+
+```rust
+let mut listening = rustnish::start_server(port, upstream_port);
+
+let client = Client::new();
+
+let url = ("http://127.0.0.1:".to_string() + &port.to_string())
+    .into_url()
+    .unwrap();
+let request_builder = client.get(url);
+let mut upstream_response = request_builder.send().unwrap();
+```
+
+Next we start our reverse proxy, configured with the port it should listen on and the upstream port it should forward requests to. Then we make a request to the reverse proxy and read the response. Again, doing that with the HTTP client API Hyper provides is fairly easy.
+
+```rust
+let mut body = String::new();
+let _size = upstream_response.read_to_string(&mut body).unwrap();
+
+let _guard = listening.close();
+let _dummy_guard = dummy_server.close();
+
+assert_eq!("hello", body);
+```
+
+The last part of the test is to make sure that the response received matches what we expect. For reading the response body we need to make room for it by allocating a String variable. This is a bit counter-intuitive here - why is there no method on the stream Read trait that makes that String for me? Maybe the philosophy is that I as the consumer of the API should be aware of the memory impact reading that stream has? It looks ugly that I have to define a mutable variable ```body```, but I never really mutate it. I just fill it once.
+
+Before we can do the assertion to check if the response received is correct we need to shut down the two servers we started. This is important because otherwise the test run could just hang and not terminate. If the assertion fails then the execution will panic in the test function and shutting down the servers would never happen. That's why we stop the servers first and make our assertion at the very end.
+
+After refactoring the application code this test is passing :-)
+
+At this point I realize that an integration testing framework would be useful that has clear setup and teardown phases for test runs. That would help structuring this test by moving the test server shutdown to a place that is always called regardless if the test is passing or not. A quick web search points to the [Stainless](https://crates.io/crates/stainless) crate which probably helps with that.
+
+## Conclusion
+
+The basic test infrastructure that Rust core ships with is great and let's you quickly get started with Testing. Integration tests are application dependent and many Rust libraries write their own helper macros to ease test case development. As mentioned there are libraries like [Stainless](https://crates.io/crates/stainless) that can ease handling of initialization and shutdown code for tests.
