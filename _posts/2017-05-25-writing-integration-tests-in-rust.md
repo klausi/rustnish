@@ -16,7 +16,7 @@ Here is the requirement for goal 2 of Rustnish:
 > Write integration tests that confirm that the reverse proxy is working as
 > expected. Add tests with broken HTTP requests to cover error handling of the
 > reverse proxy. Refactor the code to accept arbitrary port numbers so that the
-> tests can simulate a real backend wihout requiring root access to bind on port
+> tests can simulate a real backend without requiring root access to bind on port
 > 80.
 
 ## Integration test setup
@@ -38,7 +38,7 @@ fn test_pass_through() {
 ```
 
 Because this is an integration test we have to treat our own application
-"rustnish" as external create that needs to be included here. The ```#[test]```
+"rustnish" as external crate that needs to be included here. The ```#[test]```
 attribute tells the test runner (cargo) that this function should be executed
 as test. Since the start_server() function does not exist yet this test should
 fail because it will not even compile.
