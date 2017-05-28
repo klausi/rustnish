@@ -3,6 +3,9 @@ title: "Using Eclipse IDE for Rust on Ubuntu"
 layout: post
 ---
 
+**Update: [New blog post about choosing Visual Studio Code for Rust]({{ site.baseurl }}{% post_url 2017-05-28-using-visual-studio-code-for-rust-on-ubuntu %})
+because of better IDE support.**
+
 In [my first blog post](
 {{ site.baseurl }}{% post_url 2017-04-30-getting-started-with-rust %}) I was
 starting out with Atom editor but quickly realized that it is lacking features

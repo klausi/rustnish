@@ -82,7 +82,7 @@ language itself!
 
 ## Picking an editor
 
-**Update: [New blog post about choosing Eclipse for Rust]({{ site.baseurl }}{% post_url 2017-05-06-using-eclipse-ide-for-rust-on-ubuntu %})
+**Update: [New blog post about choosing Visual Studio Code for Rust]({{ site.baseurl }}{% post_url 2017-05-28-using-visual-studio-code-for-rust-on-ubuntu %})
 because of better IDE support.**
 
 [areweideyet.com](https://areweideyet.com/) lists editors and Integrated
