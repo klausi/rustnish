@@ -1,6 +1,8 @@
 # Rustnish
 Experimental project to learn Rust. A reverse proxy.
 
+https://klausi.github.io/rustnish/
+
 ## Goal 1: Just pipe HTTP requests through
 Completed: yes
 
