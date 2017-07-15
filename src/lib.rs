@@ -33,10 +33,11 @@ impl Service for Proxy {
                                                          .with_body("No host header in request")));
 
             }
-            Some(h) => h,
+            Some(h) => h.hostname(),
         };
+
         let request_uri = request.uri();
-        let upstream_uri = ("http://".to_string() + &host.to_string() + request_uri.path())
+        let upstream_uri = ("http://".to_string() + host + request_uri.path())
             .parse()
             .unwrap();
 
