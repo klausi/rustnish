@@ -12,7 +12,6 @@ use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
-use hyper::Uri;
 use std::thread;
 use futures::sync::oneshot;
 
@@ -39,9 +38,10 @@ impl Service for Proxy {
         };
 
         let request_uri = request.uri();
-        let upstream_uri = ("http://".to_string() + host + request_uri.path())
-            .parse()
-            .unwrap();
+        let upstream_uri = ("http://".to_string() + host + ":" + &self.upstream_port.to_string() +
+                            request_uri.path())
+                .parse()
+                .unwrap();
 
         Either::B(self.client.get(upstream_uri))
     }
@@ -50,7 +50,7 @@ impl Service for Proxy {
 // Holds the spawned thread the server is running in and a signal channel to
 // stop the server.
 pub struct Server {
-    shutdown_signal: Option<oneshot::Sender<()>>,
+    pub shutdown_signal: Option<oneshot::Sender<()>>,
     pub thread: Option<thread::JoinHandle<()>>,
 }
 
