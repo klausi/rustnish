@@ -13,6 +13,8 @@ use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
 use hyper::Uri;
+use std::thread;
+use futures::sync::oneshot;
 
 struct Proxy {
     upstream_port: u16,
@@ -45,30 +47,49 @@ impl Service for Proxy {
     }
 }
 
-pub fn start_server(port: u16, upstream_port: u16) {
-    let address = "127.0.0.1:".to_owned() + &port.to_string();
-    println!("Listening on {}", address);
-    let addr = address.parse().unwrap();
+// Holds the spawned thread the server is running in and a signal channel to
+// stop the server.
+pub struct Server {
+    shutdown_signal: Option<oneshot::Sender<()>>,
+    pub thread: Option<thread::JoinHandle<()>>,
+}
 
-    // Prepare a Tokio core that we will use for our server and our client.
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    let http = Http::new();
-    let listener = TcpListener::bind(&addr, &handle).unwrap();
-    let client = Client::new(&handle);
+pub fn start_server(port: u16, upstream_port: u16) -> Server {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
-    let server = listener
-        .incoming()
-        .for_each(move |(sock, addr)| {
-            http.bind_connection(&handle,
-                                 sock,
-                                 addr,
-                                 Proxy {
-                                     upstream_port: upstream_port,
-                                     client: client.clone(),
-                                 });
-            Ok(())
-        });
+    let thread = thread::Builder::new()
+        .name("rustnish".to_owned())
+        .spawn(move || {
+            let address = "127.0.0.1:".to_owned() + &port.to_string();
+            println!("Listening on {}", address);
+            let addr = address.parse().unwrap();
 
-    core.run(server).unwrap();
+            // Prepare a Tokio core that we will use for our server and our client.
+            let mut core = Core::new().unwrap();
+            let handle = core.handle();
+            let http = Http::new();
+            let listener = TcpListener::bind(&addr, &handle).unwrap();
+            let client = Client::new(&handle);
+
+            let server = listener
+                .incoming()
+                .for_each(move |(sock, addr)| {
+                    http.bind_connection(&handle,
+                                         sock,
+                                         addr,
+                                         Proxy {
+                                             upstream_port: upstream_port,
+                                             client: client.clone(),
+                                         });
+                    Ok(())
+                });
+
+            core.run(server).unwrap();
+        })
+        .unwrap();
+
+    Server {
+        shutdown_signal: Some(shutdown_tx),
+        thread: Some(thread),
+    }
 }
