@@ -3,7 +3,6 @@ extern crate rustnish;
 
 use hyper::server::{Server, Request, Response};
 use hyper::Client;
-use hyper::client::IntoUrl;
 use std::io::Read;
 
 #[test]

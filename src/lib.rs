@@ -7,8 +7,12 @@ use hyper::server::{Http, Request, Response, Service};
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
 use futures::Stream;
+use futures::future::{Either, FutureResult};
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
+use hyper::header::Host;
+use hyper::StatusCode;
+use hyper::Uri;
 
 struct Proxy {
     upstream_port: u16,
@@ -19,12 +23,24 @@ impl Service for Proxy {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = FutureResponse;
+    type Future = Either<FutureResult<Self::Response, Self::Error>, FutureResponse>;
 
     fn call(&self, request: Request) -> Self::Future {
-        let uri = "http://drupal-8.localhost".parse().unwrap();
+        let host = match request.headers().get::<Host>() {
+            None => {
+                return Either::A(futures::future::ok(Response::new()
+                                                         .with_status(StatusCode::BadRequest)
+                                                         .with_body("No host header in request")));
 
-        self.client.get(uri)
+            }
+            Some(h) => h,
+        };
+        let request_uri = request.uri();
+        let upstream_uri = ("http://".to_string() + &host.to_string() + request_uri.path())
+            .parse()
+            .unwrap();
+
+        Either::B(self.client.get(upstream_uri))
     }
 }
 
