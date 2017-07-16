@@ -6,7 +6,6 @@ extern crate tokio_core;
 use hyper::Client;
 use hyper::Uri;
 use hyper::server::{Http, Request, Response, Service};
-use rustnish::Server;
 use std::thread;
 use futures::{Future, Stream};
 use tokio_core::reactor::Core;
@@ -29,7 +28,7 @@ impl Service for DummyServer {
 }
 
 // Starts a dummy server in a separate thread.
-fn start_dummy_server(port: u16) -> Server {
+fn start_dummy_server(port: u16) -> thread::JoinHandle<()> {
     let thread = thread::Builder::new()
         .name("test-server".to_owned())
         .spawn(move || {
@@ -41,10 +40,7 @@ fn start_dummy_server(port: u16) -> Server {
                })
         .unwrap();
 
-    Server {
-        shutdown_signal: None,
-        thread: Some(thread),
-    }
+    thread
 }
 
 // Since it so complicated to make a client request with a Tokio core we have

@@ -13,7 +13,6 @@ use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
 use std::thread;
-use futures::sync::oneshot;
 
 struct Proxy {
     upstream_port: u16,
@@ -47,24 +46,17 @@ impl Service for Proxy {
     }
 }
 
-// Holds the spawned thread the server is running in and a signal channel to
-// stop the server.
-pub struct Server {
-    pub shutdown_signal: Option<oneshot::Sender<()>>,
-    pub thread: Option<thread::JoinHandle<()>>,
-}
-
-pub fn start_server(port: u16, upstream_port: u16) -> Server {
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
 
     let thread = thread::Builder::new()
         .name("rustnish".to_owned())
         .spawn(move || {
             let address = "127.0.0.1:".to_owned() + &port.to_string();
-            println!("Listening on {}", address);
+            println!("Listening on http://{}", address);
             let addr = address.parse().unwrap();
 
-            // Prepare a Tokio core that we will use for our server and our client.
+            // Prepare a Tokio core that we will use for our server and our
+            // client.
             let mut core = Core::new().unwrap();
             let handle = core.handle();
             let http = Http::new();
@@ -88,8 +80,5 @@ pub fn start_server(port: u16, upstream_port: u16) -> Server {
         })
         .unwrap();
 
-    Server {
-        shutdown_signal: Some(shutdown_tx),
-        thread: Some(thread),
-    }
+    thread
 }
