@@ -31,12 +31,12 @@ fn start_dummy_server(port: u16) -> thread::JoinHandle<()> {
     let thread = thread::Builder::new()
         .name("test-server".to_owned())
         .spawn(move || {
-                   let address = "127.0.0.1:".to_owned() + &port.to_string();
-                   let addr = address.parse().unwrap();
+            let address = "127.0.0.1:".to_owned() + &port.to_string();
+            let addr = address.parse().unwrap();
 
-                   let server = Http::new().bind(&addr, || Ok(DummyServer)).unwrap();
-                   server.run().unwrap();
-               })
+            let server = Http::new().bind(&addr, || Ok(DummyServer)).unwrap();
+            server.run().unwrap();
+        })
         .unwrap();
 
     thread
@@ -69,8 +69,10 @@ fn test_pass_through() {
         .unwrap();
     let response = client_get(url);
 
-    assert_eq!(Ok("hello"),
-               str::from_utf8(&response.body().concat2().wait().unwrap()));
+    assert_eq!(
+        Ok("hello"),
+        str::from_utf8(&response.body().concat2().wait().unwrap())
+    );
 }
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
@@ -88,6 +90,8 @@ fn test_upstream_down() {
     let response = client_get(url);
 
     assert_eq!(StatusCode::BadGateway, response.status());
-    assert_eq!(Ok("Something went wrong, please try again later."),
-               str::from_utf8(&response.body().concat2().wait().unwrap()));
+    assert_eq!(
+        Ok("Something went wrong, please try again later."),
+        str::from_utf8(&response.body().concat2().wait().unwrap())
+    );
 }

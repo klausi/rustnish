@@ -23,17 +23,24 @@ impl Service for Proxy {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = Either<FutureResult<Self::Response, Self::Error>,
-           futures::OrElse<FutureResponse,
-                           FutureResult<Self::Response, Self::Error>,
-                           fn(Self::Error) -> FutureResult<Self::Response, Self::Error>>>;
+    type Future = Either<
+        FutureResult<Self::Response, Self::Error>,
+        futures::OrElse<
+            FutureResponse,
+            FutureResult<Self::Response, Self::Error>,
+            fn(Self::Error)
+                -> FutureResult<Self::Response, Self::Error>,
+        >,
+    >;
 
     fn call(&self, request: Request) -> Self::Future {
         let host = match request.headers().get::<Host>() {
             None => {
-                return Either::A(futures::future::ok(Response::new()
-                                                         .with_status(StatusCode::BadRequest)
-                                                         .with_body("No host header in request")));
+                return Either::A(futures::future::ok(
+                    Response::new()
+                        .with_status(StatusCode::BadRequest)
+                        .with_body("No host header in request"),
+                ));
 
             }
             Some(h) => h.hostname(),
@@ -41,19 +48,19 @@ impl Service for Proxy {
 
         let request_uri = request.uri();
         let upstream_uri = ("http://".to_string() + host + ":" + &self.upstream_port.to_string() +
-                            request_uri.path())
-                .parse()
-                .unwrap();
+                                request_uri.path())
+            .parse()
+            .unwrap();
 
-        Either::B(self.client
-                      .get(upstream_uri)
-                      .or_else(|_| {
-                          // For security reasons do not show the exact error to end users.
-                          // @todo Log the error.
-                                   futures::future::ok(Response::new()
-                                                           .with_status(StatusCode::BadGateway)
-                                                           .with_body("Something went wrong, please try again later."))
-                               }))
+        Either::B(self.client.get(upstream_uri).or_else(|_| {
+            // For security reasons do not show the exact error to end users.
+            // @todo Log the error.
+            futures::future::ok(
+                Response::new()
+                    .with_status(StatusCode::BadGateway)
+                    .with_body("Something went wrong, please try again later."),
+            )
+        }))
     }
 }
 
@@ -74,18 +81,18 @@ pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
             let listener = TcpListener::bind(&addr, &handle).unwrap();
             let client = Client::new(&handle);
 
-            let server = listener
-                .incoming()
-                .for_each(move |(sock, addr)| {
-                    http.bind_connection(&handle,
-                                         sock,
-                                         addr,
-                                         Proxy {
-                                             upstream_port: upstream_port,
-                                             client: client.clone(),
-                                         });
-                    Ok(())
-                });
+            let server = listener.incoming().for_each(move |(sock, addr)| {
+                http.bind_connection(
+                    &handle,
+                    sock,
+                    addr,
+                    Proxy {
+                        upstream_port: upstream_port,
+                        client: client.clone(),
+                    },
+                );
+                Ok(())
+            });
 
             core.run(server).unwrap();
         })
