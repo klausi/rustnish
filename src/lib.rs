@@ -6,7 +6,7 @@ use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
-use futures::Stream;
+use futures::{Stream, Future};
 use futures::future::{Either, FutureResult};
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
@@ -23,7 +23,10 @@ impl Service for Proxy {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = Either<FutureResult<Self::Response, Self::Error>, FutureResponse>;
+    type Future = Either<FutureResult<Self::Response, Self::Error>,
+           futures::OrElse<FutureResponse,
+                           FutureResult<Self::Response, Self::Error>,
+                           fn(Self::Error) -> FutureResult<Self::Response, Self::Error>>>;
 
     fn call(&self, request: Request) -> Self::Future {
         let host = match request.headers().get::<Host>() {
@@ -42,7 +45,15 @@ impl Service for Proxy {
                 .parse()
                 .unwrap();
 
-        Either::B(self.client.get(upstream_uri))
+        Either::B(self.client
+                      .get(upstream_uri)
+                      .or_else(|_| {
+                          // For security reasons do not show the exact error to end users.
+                          // @todo Log the error.
+                                   futures::future::ok(Response::new()
+                                                           .with_status(StatusCode::BadGateway)
+                                                           .with_body("Something went wrong, please try again later."))
+                               }))
     }
 }
 

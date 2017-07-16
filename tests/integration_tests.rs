@@ -3,8 +3,7 @@ extern crate futures;
 extern crate rustnish;
 extern crate tokio_core;
 
-use hyper::Client;
-use hyper::Uri;
+use hyper::{Client, StatusCode, Uri};
 use hyper::server::{Http, Request, Response, Service};
 use std::thread;
 use futures::{Future, Stream};
@@ -71,5 +70,24 @@ fn test_pass_through() {
     let response = client_get(url);
 
     assert_eq!(Ok("hello"),
+               str::from_utf8(&response.body().concat2().wait().unwrap()));
+}
+
+// Tests that if the proxy cannot connect to upstream it returns a 502 response.
+#[test]
+fn test_upstream_down() {
+    let port = 9092;
+    let upstream_port = 9093;
+
+    let _proxy = rustnish::start_server(port, upstream_port);
+
+    // Make a request to the proxy and check the response.
+    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    let response = client_get(url);
+
+    assert_eq!(StatusCode::BadGateway, response.status());
+    assert_eq!(Ok("Something went wrong, please try again later."),
                str::from_utf8(&response.body().concat2().wait().unwrap()));
 }
