@@ -3,7 +3,7 @@ title: "Converting a Hyper server to Tokio"
 layout: post
 ---
 
-Since my [first blog post where I constructed a server with Hyper]({{ site.baseurl }}{% post_url 2017-04-30-getting-started-with-rust %}) some time has passed and there is now a new version of the library that is based on [Tokio](https://tokio.rs). My goal 2:
+Since my [first blog post where I constructed a server with Hyper]({{ site.baseurl }}{% post_url 2017-04-30-getting-started-with-rust %}) some time has passed and there is now a new version of the library that is based on [Tokio](https://tokio.rs). My goal 3:
 
 > A new version of the Hyper library has been released which is
 > based on the Tokio library. Convert the existing code to use that new version
@@ -11,7 +11,7 @@ Since my [first blog post where I constructed a server with Hyper]({{ site.baseu
 
 Tokio handles input/output asynchronously, which makes setting up a server more complicated. The benefit is more efficient parallel execution with a non-blocking event loop.
 
-You can find all the code in [the goal-02 branch on Github](https://github.com/klausi/rustnish/tree/goal-02).
+You can find all the code in [the goal-03 branch on Github](https://github.com/klausi/rustnish/tree/goal-03).
 
 ## Upgrading Hyper
 
@@ -154,7 +154,7 @@ So we went from 15 lines of code to 40 lines of code. What happened?
 
 This is where the new version of the Hyper library shines. The request and response types are now unified: a HTTP client response is the same as a HTTP server response! This is very useful in our reverse proxy use case where we can just pass through responses as is.
 
-I'm omitting [my old Hyper code](https://github.com/klausi/rustnish/blob/59c0d640530c22dad81af2f6602a27ea3895cbe9/src/lib.rs#L35) here because it is quite convoluted and long. The new code is so much nicer:
+I'm omitting [my old Hyper code](https://github.com/klausi/rustnish/blob/goal-02/src/lib.rs#L35) here because it is quite convoluted and long. The new code is so much nicer:
 
 ```rust
 impl Service for Proxy {
@@ -191,7 +191,7 @@ In the first part of ```call()``` we quickly build a custom HTTP response when t
 
 The integration testing experience has changed in good and bad ways:
 
-* In [my old integration tests]({{ site.baseurl }}{% post_url 2017-05-25-writing-integration-tests-in-rust %}) I was [struggling with hanging test cases on panics](https://users.rust-lang.org/t/how-do-you-write-integration-tests-that-fail-early-and-often/11297) and not being able to tear down test services reliably. This problem has never occurred in [the new integration test](https://github.com/klausi/rustnish/blob/goal-02/tests/integration_tests.rs) because everything is shut down as it should be when the variables run out of scope in the test function. I think that is exactly the Rust way of cleaning up, so yay!
+* In [my old integration tests]({{ site.baseurl }}{% post_url 2017-05-25-writing-integration-tests-in-rust %}) I was [struggling with hanging test cases on panics](https://users.rust-lang.org/t/how-do-you-write-integration-tests-that-fail-early-and-often/11297) and not being able to tear down test services reliably. This problem has never occurred in [the new integration test](https://github.com/klausi/rustnish/blob/goal-03/tests/integration_tests.rs) because everything is shut down as it should be when the variables run out of scope in the test function. I think that is exactly the Rust way of cleaning up, so yay!
 * The same boilerplate of thread handling and Tokio core setup is needed when creating quick and dirty HTTP servers and clients for testing. There are no synchronous helper constructs to shortcut this in test code, so you need to invent those helpers yourself for your integration test.
 
 ## Conclusion
