@@ -108,6 +108,10 @@ After a bit of research I found [Hyper](https://hyper.rs/) for Rust. That will
 give us a client and server library to deal with HTTP requests so that we don't
 need to parse HTTP requests ourselves.
 
+**Update 2017-07-16**: A new version of Hyper has been released and setting up
+the server works a bit differently now. See the newer blog post about
+**[Converting a Hyper server to Tokio]({{ site.baseurl }}{% post_url 2017-07-16-converting-a-hyper-server-to-tokio %})**.
+
 Edit Cargo.toml in your project and add a dependency line:
 
 ```toml
