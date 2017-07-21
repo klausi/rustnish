@@ -12,6 +12,7 @@ use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
+use std::sync::mpsc;
 use std::thread;
 
 struct Proxy {
@@ -47,10 +48,21 @@ impl Service for Proxy {
         };
 
         let request_uri = request.uri();
-        let upstream_uri = ("http://".to_string() + host + ":" + &self.upstream_port.to_string() +
-                                request_uri.path())
-            .parse()
-            .unwrap();
+        let upstream_string_uri = "http://".to_string() + host + ":" +
+            &self.upstream_port.to_string() + request_uri.path();
+        let upstream_uri = match upstream_string_uri.parse() {
+            Ok(u) => u,
+            _ => {
+                // We can't actually test this because parsing the URI never
+                // fails. However, should that change at any point this is the
+                // right thing to do.
+                return Either::A(futures::future::ok(
+                    Response::new()
+                        .with_status(StatusCode::BadRequest)
+                        .with_body("Invalid host header in request"),
+                ));
+            }
+        };
 
         Either::B(self.client.get(upstream_uri).or_else(|_| {
             // For security reasons do not show the exact error to end users.
@@ -65,12 +77,15 @@ impl Service for Proxy {
 }
 
 pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
+    // We need to block until the server has bound successfully to the port, so
+    // we block on this channel before we return. As soon as the thread sends
+    // out the signal we can return.
+    let (ready_tx, ready_rx) = mpsc::channel();
 
     let thread = thread::Builder::new()
         .name("rustnish".to_owned())
         .spawn(move || {
             let address = "127.0.0.1:".to_owned() + &port.to_string();
-            println!("Listening on http://{}", address);
             let addr = address.parse().unwrap();
 
             // Prepare a Tokio core that we will use for our server and our
@@ -93,10 +108,14 @@ pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
                 );
                 Ok(())
             });
+            ready_tx.send(true).unwrap();
 
+            println!("Listening on http://{}", address);
             core.run(server).unwrap();
         })
         .unwrap();
+
+    let _bind_ready = ready_rx.recv().unwrap();
 
     thread
 }
