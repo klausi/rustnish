@@ -1,6 +1,8 @@
 extern crate hyper;
 extern crate futures;
 extern crate tokio_core;
+#[macro_use]
+extern crate error_chain;
 
 use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
@@ -14,6 +16,12 @@ use hyper::header::Host;
 use hyper::StatusCode;
 use std::sync::mpsc;
 use std::thread;
+use errors::*;
+
+mod errors {
+    // Create the Error, ErrorKind, ResultExt, and Result types
+    error_chain!{}
+}
 
 struct Proxy {
     upstream_port: u16,
@@ -76,7 +84,7 @@ impl Service for Proxy {
     }
 }
 
-pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
+pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<()>> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
@@ -116,5 +124,5 @@ pub fn start_server(port: u16, upstream_port: u16) -> thread::JoinHandle<()> {
 
     let _bind_ready = ready_rx.recv().unwrap();
 
-    thread
+    Ok(thread)
 }
