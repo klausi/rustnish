@@ -84,7 +84,7 @@ impl Service for Proxy {
     }
 }
 
-pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<()>> {
+pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Error>> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
@@ -92,7 +92,7 @@ pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<
 
     let thread = thread::Builder::new()
         .name("rustnish".to_owned())
-        .spawn(move || {
+        .spawn(move || -> Error {
             let address = ([127, 0, 0, 1], port).into();
 
             // Prepare a Tokio core that we will use for our server and our
@@ -118,9 +118,12 @@ pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<
             ready_tx.send(true).unwrap();
 
             println!("Listening on http://{}", address);
-            core.run(server).unwrap();
+            match core.run(server) {
+                Ok(_) => "The Tokio core run ended unexpectedly".into(),
+                Err(e) => Error::with_chain(e, "Tokio core run failed"),
+            }
         })
-        .unwrap();
+        .chain_err(|| "Spawning server thread failed")?;
 
     let _bind_ready = ready_rx.recv().unwrap();
 
