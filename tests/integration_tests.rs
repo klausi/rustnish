@@ -81,7 +81,7 @@ fn test_pass_through() {
     let _dummy_server = start_dummy_server(upstream_port);
 
     // Start our reverse proxy which forwards to the dummy server.
-    let _proxy = rustnish::start_server(port, upstream_port);
+    let _proxy = rustnish::start_server_background(port, upstream_port);
 
     // Make a request to the proxy and check if we get the hello back.
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
@@ -101,7 +101,7 @@ fn test_upstream_down() {
     let port = 9092;
     let upstream_port = 9093;
 
-    let _proxy = rustnish::start_server(port, upstream_port);
+    let _proxy = rustnish::start_server_background(port, upstream_port);
 
     // Make a request to the proxy and check the response.
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
@@ -122,7 +122,7 @@ fn test_invalid_host() {
     let port = 9094;
     let upstream_port = 9095;
 
-    let _proxy = rustnish::start_server(port, upstream_port);
+    let _proxy = rustnish::start_server_background(port, upstream_port);
 
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()

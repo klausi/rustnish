@@ -84,7 +84,23 @@ impl Service for Proxy {
     }
 }
 
-pub fn start_server(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Error>> {
+pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
+    let thread = start_server_background(port, upstream_port)
+        .chain_err(|| "Spawning server thread failed")?;
+    match thread.join() {
+        Ok(thread_error) => {
+            return Err(Error::with_chain(
+                thread_error,
+                "The server thread stopped unexpectedly",
+            ))
+        }
+        // I would love to pass up the error here, but it is a Box and I don't
+        // know how to do that.
+        Err(_) => bail!("Blocking on the server thread failed"),
+    };
+}
+
+pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Error>> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
