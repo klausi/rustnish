@@ -145,9 +145,17 @@ fn test_invalid_host() {
 // Tests the error result if a port is already occupied on this host.
 #[test]
 fn test_port_occupied() {
+    // Use the same port for upstream server and proxy, which will cause an
+    // error.
     let port = 9096;
 
     let _dummy_server = start_dummy_server(port);
-    let error = rustnish::start_server_blocking(port, port).unwrap_err();
-    println!("{}", error.display());
+    let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
+    assert_eq!(error_chain.description(), "The server thread stopped unexpectedly");
+    let mut iter = error_chain.iter();
+    let _first = iter.next();
+    let second = iter.next().unwrap();
+    assert_eq!(second.to_string(), "Failed to bind server to address 127.0.0.1:9096");
+    let third = iter.next().unwrap();
+    assert_eq!(third.to_string(), "Address already in use (os error 98)");
 }

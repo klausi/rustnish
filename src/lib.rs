@@ -8,7 +8,7 @@ use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::Core;
-use futures::{Stream, Future};
+use futures::{Future, Stream};
 use futures::future::{Either, FutureResult};
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
