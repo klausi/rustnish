@@ -116,7 +116,15 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
             let mut core = Core::new().unwrap();
             let handle = core.handle();
             let http = Http::new();
-            let listener = TcpListener::bind(&address, &handle).unwrap();
+            let listener = match TcpListener::bind(&address, &handle) {
+                Ok(l) => l,
+                Err(e) => {
+                    return Error::with_chain(
+                        e,
+                        format!("Failed to bind server to address {}", address),
+                    )
+                }
+            };
             let client = Client::new(&handle);
 
             let server = listener.incoming().for_each(move |(sock, addr)| {
@@ -141,7 +149,7 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
         })
         .chain_err(|| "Spawning server thread failed")?;
 
-    let _bind_ready = ready_rx.recv().unwrap();
+    let _bind_ready = ready_rx.recv();
 
     Ok(thread)
 }

@@ -2,6 +2,7 @@ extern crate hyper;
 extern crate futures;
 extern crate rustnish;
 extern crate tokio_core;
+extern crate error_chain;
 
 use hyper::{Client, Method, StatusCode, Uri};
 use hyper::header::Host;
@@ -11,6 +12,7 @@ use std::thread;
 use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use std::str;
+use error_chain::ChainedError;
 
 struct DummyServer;
 
@@ -138,4 +140,14 @@ fn test_invalid_host() {
         Ok("Something went wrong, please try again later."),
         str::from_utf8(&response.body().concat2().wait().unwrap())
     );
+}
+
+// Tests the error result if a port is already occupied on this host.
+#[test]
+fn test_port_occupied() {
+    let port = 9096;
+
+    let _dummy_server = start_dummy_server(port);
+    let error = rustnish::start_server_blocking(port, port).unwrap_err();
+    println!("{}", error.display());
 }
