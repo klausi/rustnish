@@ -113,7 +113,10 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
 
             // Prepare a Tokio core that we will use for our server and our
             // client.
-            let mut core = Core::new().unwrap();
+            let mut core = match Core::new() {
+                Ok(c) => c,
+                Err(e) => return Error::with_chain(e, "Failed to create Tokio core"),
+            };
             let handle = core.handle();
             let http = Http::new();
             let listener = match TcpListener::bind(&address, &handle) {
@@ -139,7 +142,10 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
                 );
                 Ok(())
             });
-            ready_tx.send(true).unwrap();
+            match ready_tx.send(true) {
+                Ok(_) => {}
+                Err(e) => return Error::with_chain(e, "Failed to send back thread ready signal."),
+            }
 
             println!("Listening on http://{}", address);
             match core.run(server) {

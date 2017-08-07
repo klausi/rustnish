@@ -12,7 +12,6 @@ use std::thread;
 use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use std::str;
-use error_chain::ChainedError;
 
 struct DummyServer;
 
@@ -151,11 +150,17 @@ fn test_port_occupied() {
 
     let _dummy_server = start_dummy_server(port);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
-    assert_eq!(error_chain.description(), "The server thread stopped unexpectedly");
+    assert_eq!(
+        error_chain.description(),
+        "The server thread stopped unexpectedly"
+    );
     let mut iter = error_chain.iter();
     let _first = iter.next();
     let second = iter.next().unwrap();
-    assert_eq!(second.to_string(), "Failed to bind server to address 127.0.0.1:9096");
+    assert_eq!(
+        second.to_string(),
+        "Failed to bind server to address 127.0.0.1:9096"
+    );
     let third = iter.next().unwrap();
     assert_eq!(third.to_string(), "Address already in use (os error 98)");
 }
