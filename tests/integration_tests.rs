@@ -22,9 +22,21 @@ impl Service for DummyServer {
     type Error = hyper::Error;
     type Future = futures::future::FutureResult<Self::Response, Self::Error>;
 
-    fn call(&self, _request: Request) -> Self::Future {
+    fn call(&self, request: Request) -> Self::Future {
         let mut response = Response::new();
-        response.set_body("hello");
+
+        match request.method() {
+            &Method::Get => {
+                response.set_body("hello");
+            }
+            &Method::Post => {
+                response.set_body("post response!");
+            }
+            _ => {
+                response.set_status(StatusCode::NotFound);
+            }
+        };
+
         futures::future::ok(response)
     }
 }
@@ -60,6 +72,18 @@ fn client_get(url: Uri) -> Response {
     let client = Client::new(&core.handle());
 
     let work = client.get(url).and_then(|response| Ok(response));
+    core.run(work).unwrap()
+}
+
+fn client_post(url: Uri, body: &str) -> Response {
+    let mut core = Core::new().unwrap();
+    let client = Client::new(&core.handle());
+
+    let mut req = Request::new(Method::Post, url);
+    let body_data = String::from(body);
+    req.set_body(body_data);
+
+    let work = client.request(req).and_then(|response| Ok(response));
     core.run(work).unwrap()
 }
 
@@ -163,4 +187,27 @@ fn test_port_occupied() {
     );
     let third = iter.next().unwrap();
     assert_eq!(third.to_string(), "Address already in use (os error 98)");
+}
+
+// Tests that POST requests are also passed through.
+#[test]
+fn test_post_request() {
+    let port = 9097;
+    let upstream_port = 9098;
+
+    let _post_server = start_dummy_server(upstream_port);
+
+    // Start our reverse proxy which forwards to the post server.
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    // Make a request to the proxy and check if we get the hello back.
+    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    let response = client_post(url, "abc");
+
+    assert_eq!(
+        Ok("post response!"),
+        str::from_utf8(&response.body().concat2().wait().unwrap())
+    );
 }
