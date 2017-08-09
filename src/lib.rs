@@ -42,7 +42,7 @@ impl Service for Proxy {
         >,
     >;
 
-    fn call(&self, request: Request) -> Self::Future {
+    fn call(&self, mut request: Request) -> Self::Future {
         let host = match request.headers().get::<Host>() {
             None => {
                 return Either::A(futures::future::ok(
@@ -52,12 +52,17 @@ impl Service for Proxy {
                 ));
 
             }
-            Some(h) => h.hostname(),
+            // Copy the string out of the request to avoid borrow checker
+            // immutability errors later.
+            Some(h) => h.hostname().to_owned(),
         };
 
-        let request_uri = request.uri();
-        let upstream_string_uri = "http://".to_string() + host + ":" +
+        // Copy the request URI out of the request to avoid borrow checker
+        // immutability errors later.
+        let request_uri = request.uri().to_owned();
+        let upstream_string_uri = "http://".to_string() + &host + ":" +
             &self.upstream_port.to_string() + request_uri.path();
+
         let upstream_uri = match upstream_string_uri.parse() {
             Ok(u) => u,
             _ => {
@@ -72,7 +77,9 @@ impl Service for Proxy {
             }
         };
 
-        Either::B(self.client.get(upstream_uri).or_else(|_| {
+        request.set_uri(upstream_uri);
+
+        Either::B(self.client.request(request).or_else(|_| {
             // For security reasons do not show the exact error to end users.
             // @todo Log the error.
             futures::future::ok(
