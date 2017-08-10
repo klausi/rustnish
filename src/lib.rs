@@ -155,6 +155,9 @@ pub fn start_server_background(
         })
         .chain_err(|| "Spawning server thread failed")?;
 
+    // Whether our channel to the thread received something or was closed with
+    // an error because the thread errored - we don't care. This call is just
+    // here to block until the server binding in the thread is done.
     let _bind_ready = ready_rx.recv();
 
     Ok(thread)
