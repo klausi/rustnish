@@ -97,19 +97,23 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
     match thread.join() {
         Ok(thread_result) => match thread_result {
             Ok(_) => bail!("The server thread finished unexpectedly"),
-            Err(error) =>
-            return Err(Error::with_chain(
-                error,
-                "The server thread stopped with an error",
-            )),
-        }
+            Err(error) => {
+                return Err(Error::with_chain(
+                    error,
+                    "The server thread stopped with an error",
+                ))
+            }
+        },
         // I would love to pass up the error here, but it is a Box and I don't
         // know how to do that.
-        Err(_) => bail!("The server thread panicked")
+        Err(_) => bail!("The server thread panicked"),
     };
 }
 
-pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Result<()>>> {
+pub fn start_server_background(
+    port: u16,
+    upstream_port: u16,
+) -> Result<thread::JoinHandle<Result<()>>> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
@@ -127,7 +131,8 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
             let mut core = Core::new().chain_err(|| "Failed to create Tokio core")?;
             let handle = core.handle();
             let http = Http::new();
-            let listener = TcpListener::bind(&address, &handle).chain_err(|| format!("Failed to bind server to address {}", address))?;
+            let listener = TcpListener::bind(&address, &handle)
+                .chain_err(|| format!("Failed to bind server to address {}", address))?;
             let client = Client::new(&handle);
 
             let server = listener.incoming().for_each(move |(sock, addr)| {
