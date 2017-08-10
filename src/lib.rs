@@ -95,19 +95,21 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
     let thread = start_server_background(port, upstream_port)
         .chain_err(|| "Spawning server thread failed")?;
     match thread.join() {
-        Ok(thread_error) => {
+        Ok(thread_result) => match thread_result {
+            Ok(_) => bail!("The server thread finished unexpectedly"),
+            Err(error) =>
             return Err(Error::with_chain(
-                thread_error,
-                "The server thread stopped unexpectedly",
-            ))
+                error,
+                "The server thread stopped with an error",
+            )),
         }
         // I would love to pass up the error here, but it is a Box and I don't
         // know how to do that.
-        Err(_) => bail!("Blocking on the server thread failed"),
+        Err(_) => bail!("The server thread panicked")
     };
 }
 
-pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Error>> {
+pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::JoinHandle<Result<()>>> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
@@ -115,26 +117,17 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
 
     let thread = thread::Builder::new()
         .name("rustnish".to_owned())
-        .spawn(move || -> Error {
+        // Even if our thread returns nothing but errors the Rust convention is
+        // to always do that in the form of a Result type.
+        .spawn(move || -> Result<()> {
             let address = ([127, 0, 0, 1], port).into();
 
             // Prepare a Tokio core that we will use for our server and our
             // client.
-            let mut core = match Core::new() {
-                Ok(c) => c,
-                Err(e) => return Error::with_chain(e, "Failed to create Tokio core"),
-            };
+            let mut core = Core::new().chain_err(|| "Failed to create Tokio core")?;
             let handle = core.handle();
             let http = Http::new();
-            let listener = match TcpListener::bind(&address, &handle) {
-                Ok(l) => l,
-                Err(e) => {
-                    return Error::with_chain(
-                        e,
-                        format!("Failed to bind server to address {}", address),
-                    )
-                }
-            };
+            let listener = TcpListener::bind(&address, &handle).chain_err(|| format!("Failed to bind server to address {}", address))?;
             let client = Client::new(&handle);
 
             let server = listener.incoming().for_each(move |(sock, addr)| {
@@ -149,16 +142,11 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<thread::
                 );
                 Ok(())
             });
-            match ready_tx.send(true) {
-                Ok(_) => {}
-                Err(e) => return Error::with_chain(e, "Failed to send back thread ready signal."),
-            }
+            ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
 
             println!("Listening on http://{}", address);
-            match core.run(server) {
-                Ok(_) => "The Tokio core run ended unexpectedly".into(),
-                Err(e) => Error::with_chain(e, "Tokio core run failed"),
-            }
+            core.run(server).chain_err(|| "Tokio core run failed")?;
+            bail!("The Tokio core run ended unexpectedly");
         })
         .chain_err(|| "Spawning server thread failed")?;
 

@@ -176,7 +176,7 @@ fn test_port_occupied() {
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
     assert_eq!(
         error_chain.description(),
-        "The server thread stopped unexpectedly"
+        "The server thread stopped with an error"
     );
     let mut iter = error_chain.iter();
     let _first = iter.next();
