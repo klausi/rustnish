@@ -12,6 +12,9 @@ Therefore my goal 4 for Rustnish is full integration tests with no panics allowe
 > reverse proxy. All ```unwrap()``` calls in none test code should be removed and
 > covered by proper error handling.
 
+You can find all the code in [the goal-04 branch on
+Github](https://github.com/klausi/rustnish/tree/goal-04).
+
 
 ## The case for unwrap() in tests
 
