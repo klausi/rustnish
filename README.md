@@ -27,7 +27,7 @@ is based on the [Tokio library](https://tokio.rs/). Convert the existing code to
 use that new version and provide one integration test case.
 
 ## Goal 4: Full integration tests
-Completed: no
+Completed: yes
 
 Expand the integration tests to confirm that the reverse proxy is working as
 expected. Add tests with broken HTTP requests to cover error handling of the
