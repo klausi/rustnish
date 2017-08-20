@@ -25,11 +25,11 @@ impl Service for DummyServer {
     fn call(&self, request: Request) -> Self::Future {
         let mut response = Response::new();
 
-        match request.method() {
-            &Method::Get => {
+        match *request.method() {
+            Method::Get => {
                 response.set_body("hello");
             }
-            &Method::Post => {
+            Method::Post => {
                 response.set_body("post response!");
             }
             _ => {
@@ -71,7 +71,7 @@ fn client_get(url: Uri) -> Response {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
 
-    let work = client.get(url).and_then(|response| Ok(response));
+    let work = client.get(url).and_then(Ok);
     core.run(work).unwrap()
 }
 
@@ -83,7 +83,7 @@ fn client_post(url: Uri, body: &str) -> Response {
     let body_data = String::from(body);
     req.set_body(body_data);
 
-    let work = client.request(req).and_then(|response| Ok(response));
+    let work = client.request(req).and_then(Ok);
     core.run(work).unwrap()
 }
 
@@ -93,7 +93,7 @@ fn client_request(request: Request) -> Response {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
 
-    let work = client.request(request).and_then(|response| Ok(response));
+    let work = client.request(request).and_then(Ok);
     core.run(work).unwrap()
 }
 
