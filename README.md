@@ -1,4 +1,7 @@
 # Rustnish
+
+[![Build Status](https://travis-ci.org/klausi/rustnish.svg?branch=goal-05)](https://travis-ci.org/klausi/rustnish)
+
 Experimental project to learn Rust. A reverse proxy.
 
 https://klausi.github.io/rustnish/
