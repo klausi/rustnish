@@ -6,87 +6,14 @@ extern crate error_chain;
 
 use hyper::{Client, Method, StatusCode, Uri};
 use hyper::header::Host;
-use hyper::server::{Http, Request, Response, Service};
+use hyper::server::{Request, Response};
 use std::sync::mpsc;
 use std::thread;
 use futures::{Future, Stream};
 use tokio_core::reactor::Core;
 use std::str;
 
-struct DummyServer;
-
-// A dummy upstream HTTP server for testing that returns the received HTTP
-// request in the response body.
-impl Service for DummyServer {
-    type Request = Request;
-    type Response = Response;
-    type Error = hyper::Error;
-    type Future = futures::future::FutureResult<Self::Response, Self::Error>;
-
-    fn call(&self, request: Request) -> Self::Future {
-        let mut response = Response::new();
-
-        response.set_body(format!("{:?}", request));
-
-        futures::future::ok(response)
-    }
-}
-
-// Starts a dummy server in a separate thread.
-fn start_dummy_server(port: u16) -> thread::JoinHandle<()> {
-    // We need to block until the server has bound successfully to the port, so
-    // we block on this channel before we return. As soon as the thread sends
-    // out the signal we can return.
-    let (addr_tx, addr_rx) = mpsc::channel();
-
-    let thread = thread::Builder::new()
-        .name("test-server".to_owned())
-        .spawn(move || {
-            let address = "127.0.0.1:".to_owned() + &port.to_string();
-            let addr = address.parse().unwrap();
-
-            let server = Http::new().bind(&addr, || Ok(DummyServer)).unwrap();
-            addr_tx.send(true).unwrap();
-            server.run().unwrap();
-        })
-        .unwrap();
-
-    let _bind_ready = addr_rx.recv().unwrap();
-
-    thread
-}
-
-// Since it so complicated to make a client request with a Tokio core we have
-// this helper function.
-fn client_get(url: Uri) -> Response {
-    let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
-
-    let work = client.get(url).and_then(Ok);
-    core.run(work).unwrap()
-}
-
-fn client_post(url: Uri, body: &str) -> Response {
-    let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
-
-    let mut req = Request::new(Method::Post, url);
-    let body_data = String::from(body);
-    req.set_body(body_data);
-
-    let work = client.request(req).and_then(Ok);
-    core.run(work).unwrap()
-}
-
-// Since it so complicated to make a client request with a Tokio core we have
-// this helper function.
-fn client_request(request: Request) -> Response {
-    let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
-
-    let work = client.request(request).and_then(Ok);
-    core.run(work).unwrap()
-}
+mod common;
 
 #[test]
 fn test_pass_through() {
@@ -94,7 +21,7 @@ fn test_pass_through() {
     let upstream_port = 9091;
 
     // Start a dummy server on port 9091 that just echoes the request.
-    let _dummy_server = start_dummy_server(upstream_port);
+    let _dummy_server = common::start_dummy_server(upstream_port);
 
     // Start our reverse proxy which forwards to the dummy server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
@@ -103,7 +30,7 @@ fn test_pass_through() {
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
-    let response = client_get(url);
+    let response = common::client_get(url);
 
     let body = response.body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
@@ -130,7 +57,7 @@ fn test_upstream_down() {
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
-    let response = client_get(url);
+    let response = common::client_get(url);
 
     assert_eq!(StatusCode::BadGateway, response.status());
     assert_eq!(
@@ -153,7 +80,7 @@ fn test_invalid_host() {
     let mut request = Request::new(Method::Get, url);
     request.headers_mut().set(Host::new("$$$", None));
 
-    let response = client_request(request);
+    let response = common::client_request(request);
 
     // The proxy just tries to forward that as is, but no one is listening.
     assert_eq!(StatusCode::BadGateway, response.status());
@@ -170,7 +97,7 @@ fn test_port_occupied() {
     // error.
     let port = 9096;
 
-    let _dummy_server = start_dummy_server(port);
+    let _dummy_server = common::start_dummy_server(port);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
     assert_eq!(
         error_chain.description(),
@@ -195,7 +122,7 @@ fn test_post_request() {
     let port = 9097;
     let upstream_port = 9098;
 
-    let _post_server = start_dummy_server(upstream_port);
+    let _post_server = common::start_dummy_server(upstream_port);
 
     // Start our reverse proxy which forwards to the post server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
@@ -204,7 +131,7 @@ fn test_post_request() {
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
-    let response = client_post(url, "abc");
+    let response = common::client_post(url, "abc");
 
     let body = response.body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();

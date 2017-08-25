@@ -80,7 +80,7 @@ impl Service for Proxy {
 
         if let Some(socket_address) = request.remote_addr() {
             let headers = request.headers_mut();
-            headers.set_raw("X-Forwarded-For", socket_address.ip().to_string());
+            headers.append_raw("X-Forwarded-For", socket_address.ip().to_string());
         };
 
         Either::B(self.client.request(request).or_else(|_| {
