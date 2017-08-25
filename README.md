@@ -37,8 +37,8 @@ expected. Add tests with broken HTTP requests to cover error handling of the
 reverse proxy. All ```unwrap()``` calls in none test code should be removed and
 covered by proper error handling.
 
-## Goal 5: Continues integration testing with Travis CI
-Completed: no
+## Goal 5: Continuous integration testing with Travis CI
+Completed: yes
 
 Enable [Travis CI](http://travis-ci.org/) so that the automated tests are run
 after every Git push to the Rustnish repository. Enable

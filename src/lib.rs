@@ -98,7 +98,7 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
         Ok(thread_result) => match thread_result {
             Ok(_) => bail!("The server thread finished unexpectedly"),
             Err(error) => {
-                return Err(Error::with_chain(
+                Err(Error::with_chain(
                     error,
                     "The server thread stopped with an error",
                 ))
@@ -107,7 +107,7 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
         // I would love to pass up the error here, but it is a Box and I don't
         // know how to do that.
         Err(_) => bail!("The server thread panicked"),
-    };
+    }
 }
 
 pub fn start_server_background(
