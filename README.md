@@ -44,3 +44,20 @@ Enable [Travis CI](http://travis-ci.org/) so that the automated tests are run
 after every Git push to the Rustnish repository. Enable
 [Clippy](https://github.com/rust-lang-nursery/rust-clippy) that also checks for
 Rust best practices.
+
+## Goal 6: Add HTTP headers to requests/responses
+Completed: no
+
+Add the following HTTP headers to requests/responses passed through Rustnish:
+
+Headers for requests forwarded upstream:
+* `X-Forwarded-For`: the originating IP address of the client connecting to the
+  proxy. Append IP address if already set.
+* `X-Forwarded-Port`: the originating port of the HTTP request (example: 443).
+  Append port if already set.
+
+Headers for responses returned downstream:
+* `Via`: a code name for the Rustnish proxy, with the value rustnish-0.0.1.
+  Append if already set.
+* `Server`: will be added to the response ("rustnish") if the upstream server
+  didn't add it first.
