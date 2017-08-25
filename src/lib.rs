@@ -78,6 +78,11 @@ impl Service for Proxy {
 
         request.set_uri(upstream_uri);
 
+        if let Some(socket_address) = request.remote_addr() {
+            let headers = request.headers_mut();
+            headers.set_raw("X-Forwarded-For", socket_address.ip().to_string());
+        };
+
         Either::B(self.client.request(request).or_else(|_| {
             // For security reasons do not show the exact error to end users.
             // @todo Log the error.

@@ -105,10 +105,17 @@ fn test_pass_through() {
         .unwrap();
     let response = client_get(url);
 
+    let body = response.body().concat2().wait().unwrap();
+    let result = str::from_utf8(&body).unwrap();
+
+    // Check that the request method was GET.
     assert_eq!(
         "Request { method: Get, uri: \"/\", version: Http11, remote_addr:",
-        &str::from_utf8(&response.body().concat2().wait().unwrap()).unwrap()[..62]
+        &result[..62]
     );
+
+    // Check that an X-Forwarded-For header was added on the request.
+    assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
 }
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
@@ -199,8 +206,14 @@ fn test_post_request() {
         .unwrap();
     let response = client_post(url, "abc");
 
+    let body = response.body().concat2().wait().unwrap();
+    let result = str::from_utf8(&body).unwrap();
+
     assert_eq!(
         "Request { method: Post, uri: \"/\", version: Http11, remote_addr:",
-        &str::from_utf8(&response.body().concat2().wait().unwrap()).unwrap()[..63]
+        &result[..63]
     );
+
+    // Check that an X-Forwarded-For header was added on the request.
+    assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
 }
