@@ -15,7 +15,8 @@ use std::str;
 
 struct DummyServer;
 
-// A dummy upstream HTTP server for testing that just always return hello.
+// A dummy upstream HTTP server for testing that returns the received HTTP
+// request in the response body.
 impl Service for DummyServer {
     type Request = Request;
     type Response = Response;
@@ -25,17 +26,7 @@ impl Service for DummyServer {
     fn call(&self, request: Request) -> Self::Future {
         let mut response = Response::new();
 
-        match *request.method() {
-            Method::Get => {
-                response.set_body("hello");
-            }
-            Method::Post => {
-                response.set_body("post response!");
-            }
-            _ => {
-                response.set_status(StatusCode::NotFound);
-            }
-        };
+        response.set_body(format!("{:?}", request));
 
         futures::future::ok(response)
     }
@@ -102,21 +93,21 @@ fn test_pass_through() {
     let port = 9090;
     let upstream_port = 9091;
 
-    // Start a dummy server on port 9091 that just returns a hello.
+    // Start a dummy server on port 9091 that just echoes the request.
     let _dummy_server = start_dummy_server(upstream_port);
 
     // Start our reverse proxy which forwards to the dummy server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
-    // Make a request to the proxy and check if we get the hello back.
+    // Make a request to the proxy and check if we get the echo back.
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
     let response = client_get(url);
 
     assert_eq!(
-        Ok("hello"),
-        str::from_utf8(&response.body().concat2().wait().unwrap())
+        "Request { method: Get, uri: \"/\", version: Http11, remote_addr:",
+        &str::from_utf8(&response.body().concat2().wait().unwrap()).unwrap()[..62]
     );
 }
 
@@ -202,14 +193,14 @@ fn test_post_request() {
     // Start our reverse proxy which forwards to the post server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
-    // Make a request to the proxy and check if we get the hello back.
+    // Make a request to the proxy and check if we get the correct result back.
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
     let response = client_post(url, "abc");
 
     assert_eq!(
-        Ok("post response!"),
-        str::from_utf8(&response.body().concat2().wait().unwrap())
+        "Request { method: Post, uri: \"/\", version: Http11, remote_addr:",
+        &str::from_utf8(&response.body().concat2().wait().unwrap()).unwrap()[..63]
     );
 }
