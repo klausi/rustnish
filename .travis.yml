@@ -18,6 +18,8 @@ before_script:
 script:
   - cargo build
   - cargo test
+
+after_success:
   # Run Clippy at the end because compiling takes long and Clippy is broken on
   # Rust nightly often.
   - |
