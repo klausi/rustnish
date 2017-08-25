@@ -28,19 +28,18 @@ struct Proxy {
     client: Client<HttpConnector>,
 }
 
+type DirectResponse = FutureResult<Response, hyper::Error>;
+type UpstreamResponse = futures::OrElse<
+    FutureResponse,
+    FutureResult<Response, hyper::Error>,
+    fn(hyper::Error) -> FutureResult<Response, hyper::Error>,
+>;
+
 impl Service for Proxy {
     type Request = Request;
     type Response = Response;
     type Error = hyper::Error;
-    type Future = Either<
-        FutureResult<Self::Response, Self::Error>,
-        futures::OrElse<
-            FutureResponse,
-            FutureResult<Self::Response, Self::Error>,
-            fn(Self::Error)
-                -> FutureResult<Self::Response, Self::Error>,
-        >,
-    >;
+    type Future = Either<DirectResponse, UpstreamResponse>;
 
     fn call(&self, mut request: Request) -> Self::Future {
         let host = match request.headers().get::<Host>() {
@@ -92,18 +91,21 @@ impl Service for Proxy {
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let thread = start_server_background(port, upstream_port)
-        .chain_err(|| "Spawning server thread failed")?;
+    let thread = start_server_background(port, upstream_port).chain_err(
+        || "Spawning server thread failed",
+    )?;
     match thread.join() {
-        Ok(thread_result) => match thread_result {
-            Ok(_) => bail!("The server thread finished unexpectedly"),
-            Err(error) => {
-                Err(Error::with_chain(
-                    error,
-                    "The server thread stopped with an error",
-                ))
+        Ok(thread_result) => {
+            match thread_result {
+                Ok(_) => bail!("The server thread finished unexpectedly"),
+                Err(error) => {
+                    Err(Error::with_chain(
+                        error,
+                        "The server thread stopped with an error",
+                    ))
+                }
             }
-        },
+        }
         // I would love to pass up the error here, but it is a Box and I don't
         // know how to do that.
         Err(_) => bail!("The server thread panicked"),
