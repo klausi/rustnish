@@ -4,13 +4,10 @@ extern crate rustnish;
 extern crate tokio_core;
 extern crate error_chain;
 
-use hyper::{Client, Method, StatusCode, Uri};
+use hyper::{Method, StatusCode};
 use hyper::header::Host;
-use hyper::server::{Request, Response};
-use std::sync::mpsc;
-use std::thread;
+use hyper::server::Request;
 use futures::{Future, Stream};
-use tokio_core::reactor::Core;
 use std::str;
 
 mod common;
@@ -43,6 +40,10 @@ fn test_pass_through() {
 
     // Check that an X-Forwarded-For header was added on the request.
     assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
+
+    assert!(result.contains(
+        &format!("\"X-Forwarded-Port\": \"{}\"", port),
+    ));
 }
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.

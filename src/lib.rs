@@ -24,6 +24,7 @@ mod errors {
 }
 
 struct Proxy {
+    port: u16,
     upstream_port: u16,
     client: Client<HttpConnector>,
 }
@@ -81,6 +82,7 @@ impl Service for Proxy {
         if let Some(socket_address) = request.remote_addr() {
             let headers = request.headers_mut();
             headers.append_raw("X-Forwarded-For", socket_address.ip().to_string());
+            headers.append_raw("X-Forwarded-Port", self.port.to_string());
         };
 
         Either::B(self.client.request(request).or_else(|_| {
@@ -148,6 +150,7 @@ pub fn start_server_background(
                     sock,
                     addr,
                     Proxy {
+                        port: port,
                         upstream_port: upstream_port,
                         client: client.clone(),
                     },
