@@ -29,6 +29,11 @@ fn test_pass_through() {
         .unwrap();
     let response = common::client_get(url);
 
+    assert_eq!(
+        response.headers().get_raw("Via").unwrap(),
+        "1.1 rustnish-0.0.1"
+    );
+
     let body = response.body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 
@@ -144,4 +149,8 @@ fn test_post_request() {
 
     // Check that an X-Forwarded-For header was added on the request.
     assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
+
+    assert!(result.contains(
+        &format!("\"X-Forwarded-Port\": \"{}\"", port),
+    ));
 }

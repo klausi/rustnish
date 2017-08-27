@@ -30,10 +30,10 @@ struct Proxy {
 }
 
 type DirectResponse = FutureResult<Response, hyper::Error>;
-type UpstreamResponse = futures::OrElse<
+type UpstreamResponse = futures::Then<
     FutureResponse,
     FutureResult<Response, hyper::Error>,
-    fn(hyper::Error) -> FutureResult<Response, hyper::Error>,
+    fn(Result<Response>) -> FutureResult<Response, hyper::Error>,
 >;
 
 impl Service for Proxy {
@@ -85,14 +85,22 @@ impl Service for Proxy {
             headers.append_raw("X-Forwarded-Port", self.port.to_string());
         };
 
-        Either::B(self.client.request(request).or_else(|_| {
-            // For security reasons do not show the exact error to end users.
-            // @todo Log the error.
-            futures::future::ok(
-                Response::new()
-                    .with_status(StatusCode::BadGateway)
-                    .with_body("Something went wrong, please try again later."),
-            )
+        Either::B(self.client.request(request).then(|result| {
+            let our_response = match result {
+                Ok(response) => {
+                    let mut headers = response.headers().clone();
+                    headers.append_raw("Via", "rustnish-0.0.1");
+                    response.with_headers(headers)
+                }
+                Err(_) => {
+                    // For security reasons do not show the exact error to end users.
+                    // @todo Log the error.
+                    Response::new()
+                        .with_status(StatusCode::BadGateway)
+                        .with_body("Something went wrong, please try again later.")
+                }
+            };
+            futures::future::ok(our_response)
         }))
     }
 }
