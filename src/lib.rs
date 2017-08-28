@@ -33,7 +33,8 @@ type DirectResponse = FutureResult<Response, hyper::Error>;
 type UpstreamResponse = futures::Then<
     FutureResponse,
     FutureResult<Response, hyper::Error>,
-    fn(Result<Response>) -> FutureResult<Response, hyper::Error>,
+    fn(std::result::Result<Response, hyper::Error>)
+       -> FutureResult<Response, hyper::Error>,
 >;
 
 impl Service for Proxy {
@@ -89,7 +90,9 @@ impl Service for Proxy {
             let our_response = match result {
                 Ok(response) => {
                     let mut headers = response.headers().clone();
-                    headers.append_raw("Via", "rustnish-0.0.1");
+                    // @todo HTTP version 1.1 hard coded here - this should be
+                    // read from our response?
+                    headers.append_raw("Via", "1.1 rustnish-0.0.1");
                     response.with_headers(headers)
                 }
                 Err(_) => {

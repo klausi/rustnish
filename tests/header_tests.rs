@@ -5,7 +5,7 @@ extern crate tokio_core;
 extern crate error_chain;
 
 use hyper::Method;
-use hyper::server::{Request, Response};
+use hyper::server::Request;
 use futures::{Future, Stream};
 use std::str;
 
