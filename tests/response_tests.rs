@@ -33,6 +33,15 @@ fn test_pass_through() {
         "1.1 rustnish-0.0.1"
     );
 
+    assert_eq!(
+        response
+            .headers()
+            .get::<hyper::header::Server>()
+            .unwrap()
+            .to_string(),
+        "rustnish"
+    );
+
     let body = response.body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 

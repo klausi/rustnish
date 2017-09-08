@@ -102,6 +102,14 @@ impl Service for Proxy {
                         _ => "?",
                     };
                     headers.append_raw("Via", format!("{} rustnish-0.0.1", version));
+
+                    // Append a "Server" header if not already present.
+                    if !headers.has::<hyper::header::Server>() {
+                        headers.set::<hyper::header::Server>(
+                            hyper::header::Server::new("rustnish"),
+                        );
+                    }
+
                     response.with_headers(headers)
                 }
                 Err(_) => {

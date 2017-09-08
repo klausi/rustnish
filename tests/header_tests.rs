@@ -71,3 +71,28 @@ fn test_via_header_added() {
     let second = str::from_utf8(via_headers.next().unwrap()).unwrap();
     assert_eq!(second, "1.1 rustnish-0.0.1");
 }
+
+// Tests that if a Server HTTP header is present from upstream it is not
+// overwritten.
+#[test]
+fn test_server_header_present() {
+    let port = 9103;
+    let upstream_port = 9104;
+
+    let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
+        upstream_response.with_header(hyper::header::Server::new("dummy-server"))
+    });
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    let response = common::client_get(url);
+
+    let server_header = response
+        .headers()
+        .get::<hyper::header::Server>()
+        .unwrap()
+        .to_string();
+    assert_eq!(server_header, "dummy-server");
+}
