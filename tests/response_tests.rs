@@ -2,7 +2,6 @@ extern crate hyper;
 extern crate futures;
 extern crate rustnish;
 extern crate tokio_core;
-extern crate error_chain;
 
 use hyper::{Method, StatusCode};
 use hyper::header::Host;

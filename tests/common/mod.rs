@@ -1,8 +1,5 @@
 extern crate hyper;
 extern crate futures;
-extern crate rustnish;
-extern crate tokio_core;
-extern crate error_chain;
 
 use hyper::{Client, Method, Uri};
 use hyper::server::{Http, Request, Response, Service};
