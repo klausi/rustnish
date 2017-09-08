@@ -17,7 +17,7 @@ fn test_pass_through() {
     let upstream_port = 9091;
 
     // Start a dummy server on port 9091 that just echoes the request.
-    let _dummy_server = common::start_dummy_server(upstream_port);
+    let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
 
     // Start our reverse proxy which forwards to the dummy server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
@@ -102,7 +102,7 @@ fn test_port_occupied() {
     // error.
     let port = 9096;
 
-    let _dummy_server = common::start_dummy_server(port);
+    let _dummy_server = common::start_dummy_server(port, |r| r);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
     assert_eq!(
         error_chain.description(),
@@ -127,7 +127,7 @@ fn test_post_request() {
     let port = 9097;
     let upstream_port = 9098;
 
-    let _post_server = common::start_dummy_server(upstream_port);
+    let _post_server = common::start_dummy_server(upstream_port, |r| r);
 
     // Start our reverse proxy which forwards to the post server.
     let _proxy = rustnish::start_server_background(port, upstream_port);

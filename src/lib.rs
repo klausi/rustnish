@@ -95,8 +95,7 @@ impl Service for Proxy {
                         HttpVersion::Http09 => "0.9",
                         HttpVersion::Http10 => "1.0",
                         HttpVersion::Http11 => "1.1",
-                        HttpVersion::H2 => "2.0",
-                        HttpVersion::H2c => "2.0",
+                        HttpVersion::H2 | HttpVersion::H2c => "2.0",
                         // Not sure what we should do when we don't know the
                         // version, this case is probably unreachable code
                         // anyway.

@@ -17,7 +17,7 @@ fn test_x_forwarded_for_added() {
     let port = 9099;
     let upstream_port = 9100;
 
-    let _dummy_server = common::start_dummy_server(upstream_port);
+    let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
@@ -44,4 +44,30 @@ fn test_x_forwarded_for_added() {
     assert!(result.contains(
         "\"X-Forwarded-For\": \"1.2.3.4, 127.0.0.1\"",
     ));
+}
+
+// Tests that if a Via header already exists on the request then the proxy adds
+// another value.
+#[test]
+fn test_via_header_added() {
+    let port = 9101;
+    let upstream_port = 9102;
+
+    let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
+        let mut headers = upstream_response.headers().clone();
+        headers.append_raw("Via", "1.1 test");
+        upstream_response.with_headers(headers)
+    });
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    let response = common::client_get(url);
+
+    let mut via_headers = response.headers().get_raw("Via").unwrap().iter();
+    let first = str::from_utf8(via_headers.next().unwrap()).unwrap();
+    assert_eq!(first, "1.1 test");
+    let second = str::from_utf8(via_headers.next().unwrap()).unwrap();
+    assert_eq!(second, "1.1 rustnish-0.0.1");
 }

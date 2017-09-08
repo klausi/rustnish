@@ -9,7 +9,9 @@ use futures::Future;
 use tokio_core::reactor::Core;
 use std::str;
 
-struct DummyServer;
+struct DummyServer {
+    response_function: fn(Response) -> Response,
+}
 
 // A dummy upstream HTTP server for testing that returns the received HTTP
 // request in the response body.
@@ -24,12 +26,15 @@ impl Service for DummyServer {
 
         response.set_body(format!("{:?}", request));
 
-        futures::future::ok(response)
+        futures::future::ok((self.response_function)(response))
     }
 }
 
 // Starts a dummy server in a separate thread.
-pub fn start_dummy_server(port: u16) -> thread::JoinHandle<()> {
+pub fn start_dummy_server(
+    port: u16,
+    response_function: fn(Response) -> Response,
+) -> thread::JoinHandle<()> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
@@ -41,7 +46,9 @@ pub fn start_dummy_server(port: u16) -> thread::JoinHandle<()> {
             let address = "127.0.0.1:".to_owned() + &port.to_string();
             let addr = address.parse().unwrap();
 
-            let server = Http::new().bind(&addr, || Ok(DummyServer)).unwrap();
+            let server = Http::new()
+                .bind(&addr, move || Ok(DummyServer { response_function }))
+                .unwrap();
             addr_tx.send(true).unwrap();
             server.run().unwrap();
         })
