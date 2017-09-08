@@ -17,6 +17,7 @@ use hyper::StatusCode;
 use std::sync::mpsc;
 use std::thread;
 use errors::*;
+use hyper::HttpVersion;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -90,9 +91,18 @@ impl Service for Proxy {
             let our_response = match result {
                 Ok(response) => {
                     let mut headers = response.headers().clone();
-                    // @todo HTTP version 1.1 hard coded here - this should be
-                    // read from our response?
-                    headers.append_raw("Via", "1.1 rustnish-0.0.1");
+                    let version = match response.version() {
+                        HttpVersion::Http09 => "0.9",
+                        HttpVersion::Http10 => "1.0",
+                        HttpVersion::Http11 => "1.1",
+                        HttpVersion::H2 => "2.0",
+                        HttpVersion::H2c => "2.0",
+                        // Not sure what we should do when we don't know the
+                        // version, this case is probably unreachable code
+                        // anyway.
+                        _ => "?",
+                    };
+                    headers.append_raw("Via", format!("{} rustnish-0.0.1", version));
                     response.with_headers(headers)
                 }
                 Err(_) => {
