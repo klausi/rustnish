@@ -13,8 +13,8 @@ mod common;
 
 #[test]
 fn test_pass_through() {
-    let port = 9090;
-    let upstream_port = 9091;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     // Start a dummy server on port 9091 that just echoes the request.
     let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
@@ -62,8 +62,8 @@ fn test_pass_through() {
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
 #[test]
 fn test_upstream_down() {
-    let port = 9092;
-    let upstream_port = 9093;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -83,8 +83,8 @@ fn test_upstream_down() {
 // Tests that an invalid HTTP host header does not cause a panic.
 #[test]
 fn test_invalid_host() {
-    let port = 9094;
-    let upstream_port = 9095;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -109,7 +109,7 @@ fn test_invalid_host() {
 fn test_port_occupied() {
     // Use the same port for upstream server and proxy, which will cause an
     // error.
-    let port = 9096;
+    let port = common::get_free_port();
 
     let _dummy_server = common::start_dummy_server(port, |r| r);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
@@ -122,7 +122,7 @@ fn test_port_occupied() {
     let second = iter.next().unwrap();
     assert_eq!(
         second.to_string(),
-        "Failed to bind server to address 127.0.0.1:9096"
+        format!("Failed to bind server to address 127.0.0.1:{}", port)
     );
     let third = iter.next().unwrap();
     // The exact error code is different on Linux and MacOS, so we test just for
@@ -133,8 +133,8 @@ fn test_port_occupied() {
 // Tests that POST requests are also passed through.
 #[test]
 fn test_post_request() {
-    let port = 9097;
-    let upstream_port = 9098;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _post_server = common::start_dummy_server(upstream_port, |r| r);
 

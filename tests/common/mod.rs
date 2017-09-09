@@ -4,6 +4,7 @@ extern crate futures;
 use hyper::{Client, Method, Uri};
 use hyper::server::{Http, Request, Response, Service};
 use std::sync::mpsc;
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 use std::thread;
 use futures::Future;
 use tokio_core::reactor::Core;
@@ -89,4 +90,13 @@ pub fn client_request(request: Request) -> Response {
 
     let work = client.request(request).and_then(Ok);
     core.run(work).unwrap()
+}
+
+static PORT_NR: AtomicUsize = ATOMIC_USIZE_INIT;
+
+// Returns a local port number that has not been used yet in parallel test
+// threads.
+pub fn get_free_port() -> u16 {
+    PORT_NR.compare_and_swap(0, 9090, Ordering::SeqCst);
+    PORT_NR.fetch_add(1, Ordering::SeqCst) as u16
 }

@@ -50,8 +50,8 @@ fn test_x_forwarded_for_added() {
 // another value.
 #[test]
 fn test_via_header_added() {
-    let port = 9101;
-    let upstream_port = 9102;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
         let mut headers = upstream_response.headers().clone();
@@ -76,8 +76,8 @@ fn test_via_header_added() {
 // overwritten.
 #[test]
 fn test_server_header_present() {
-    let port = 9103;
-    let upstream_port = 9104;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
         upstream_response.with_header(hyper::header::Server::new("dummy-server"))
