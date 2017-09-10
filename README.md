@@ -46,7 +46,7 @@ after every Git push to the Rustnish repository. Enable
 Rust best practices.
 
 ## Goal 6: Add HTTP headers to requests/responses
-Completed: no
+Completed: yes
 
 Add the following HTTP headers to requests/responses passed through Rustnish:
 
