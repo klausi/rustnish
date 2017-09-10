@@ -97,6 +97,5 @@ pub fn client_request(request: Request) -> Response {
 pub fn get_free_port() -> u16 {
     static PORT_NR: AtomicUsize = ATOMIC_USIZE_INIT;
 
-    PORT_NR.compare_and_swap(0, 9090, Ordering::SeqCst);
-    PORT_NR.fetch_add(1, Ordering::SeqCst) as u16
+    PORT_NR.fetch_add(1, Ordering::SeqCst) as u16 + 9090
 }
