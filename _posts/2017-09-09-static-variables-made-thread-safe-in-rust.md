@@ -107,6 +107,25 @@ of our desired value 9090. If you try
    type but no `AtomicU16`.
 
 
+## Postponing the offset calculation
+
+Thanks to a [tip from Steven Fackler]
+(https://users.rust-lang.org/t/how-do-you-access-static-variables-in-a-thread-safe-manner/12792/2)
+we can postpone our offset to the very end:
+
+```rust
+pub fn get_free_port() -> u16 {
+    static PORT_NR: AtomicUsize = ATOMIC_USIZE_INIT;
+
+    PORT_NR.fetch_add(1, Ordering::SeqCst) as u16 + 9090
+}
+```
+
+That way we can remove the initialization condition and always operate on a
+fixed offset of 9090. This is still not super intuitive because the initial
+value of our counter is at the very end which makes this function hard to read.
+
+
 ## Conclusion
 
 Rust is great at detecting race conditions at compile time and helps you do the
