@@ -14,7 +14,7 @@ fn main() {
         let stderr = &mut ::std::io::stderr();
         let errmsg = "Error writing to stderr";
 
-        writeln!(stderr, "{}", e.display()).expect(errmsg);
+        writeln!(stderr, "{}", e.display_chain()).expect(errmsg);
         ::std::process::exit(1);
     };
 }
