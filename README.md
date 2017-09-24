@@ -61,3 +61,10 @@ Headers for responses returned downstream:
   Append if already set.
 * `Server`: will be added to the response ("rustnish") if the upstream server
   didn't add it first.
+
+## Goal 7: Add integration test that watches for memory leaks
+Completed: no
+
+Add an integration test that ensures that the proxy server is not leaking memory
+(growing RAM usage without shrinking again). Use /proc information to compare
+memory usage of the current process before and after the test.
