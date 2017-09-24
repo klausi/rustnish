@@ -62,6 +62,7 @@ pub fn start_dummy_server(
 
 // Since it so complicated to make a client request with a Tokio core we have
 // this helper function.
+#[allow(dead_code)]
 pub fn client_get(url: Uri) -> Response {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
@@ -70,6 +71,7 @@ pub fn client_get(url: Uri) -> Response {
     core.run(work).unwrap()
 }
 
+#[allow(dead_code)]
 pub fn client_post(url: Uri, body: &str) -> Response {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
@@ -84,6 +86,7 @@ pub fn client_post(url: Uri, body: &str) -> Response {
 
 // Since it so complicated to make a client request with a Tokio core we have
 // this helper function.
+#[allow(dead_code)]
 pub fn client_request(request: Request) -> Response {
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());

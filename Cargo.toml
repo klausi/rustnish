@@ -8,3 +8,6 @@ hyper = ">=0.11.0"
 futures = ">=0.1.14"
 tokio-core = ">=0.1.8"
 error-chain = ">=0.11.0"
+
+[dev-dependencies]
+procinfo = ">=0.4.2"
