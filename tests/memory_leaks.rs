@@ -1,8 +1,8 @@
-extern crate hyper;
 extern crate futures;
+extern crate hyper;
+extern crate procinfo;
 extern crate rustnish;
 extern crate tokio_core;
-extern crate procinfo;
 
 use hyper::{Client, Uri};
 use futures::Future;
@@ -20,10 +20,6 @@ fn test_memory_after_1000_requests() {
     let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
-    // Get the resident non-swapped memory of this process that actually takes
-    // up space in RAM.
-    let memory_before = procinfo::pid::statm_self().unwrap().resident;
-
     let mut core = Core::new().unwrap();
     let client = Client::new(&core.handle());
 
@@ -31,9 +27,13 @@ fn test_memory_after_1000_requests() {
         .parse()
         .unwrap();
 
-    // Perform 1000 requests in batches of 100. Otherwise we get "Too many open
+    // Get the resident non-swapped memory of this process that actually takes
+    // up space in RAM.
+    let memory_before = procinfo::pid::statm_self().unwrap().resident;
+
+    // Perform 10000 requests in batches of 100. Otherwise we get "Too many open
     // files" errors because of opening too many ports.
-    for _i in 1..10 {
+    for _i in 1..100 {
         let mut requests = Vec::new();
 
         for _j in 0..100 {
@@ -44,9 +44,9 @@ fn test_memory_after_1000_requests() {
     }
 
     let memory_after = procinfo::pid::statm_self().unwrap().resident;
-    // Allow memory to grow 10%, I guess that is reasonable?
+    // Allow memory to grow 10x, which is is still in the range of kilobytes.
     assert!(
-        memory_after < memory_before + (memory_before / 10),
+        memory_after < memory_before * 10,
         "Memory usage at server start is {}KB, memory usage after 1000 requests is {}KB",
         memory_before,
         memory_after
