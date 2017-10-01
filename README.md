@@ -63,7 +63,7 @@ Headers for responses returned downstream:
   didn't add it first.
 
 ## Goal 7: Add integration test that watches for memory leaks
-Completed: no
+Completed: yes
 
 Add an integration test that ensures that the proxy server is not leaking memory
 (growing RAM usage without shrinking again). Use /proc information to compare
