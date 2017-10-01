@@ -18,11 +18,3 @@ before_script:
 script:
   - cargo build
   - cargo test
-
-after_success:
-  # Run Clippy at the end because compiling takes long and Clippy is broken on
-  # Rust nightly often.
-  - |
-      if [[ "$TRAVIS_RUST_VERSION" == "nightly" ]]; then
-        cargo install clippy --force && cargo clippy
-      fi
