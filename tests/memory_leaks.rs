@@ -10,10 +10,15 @@ use tokio_core::reactor::Core;
 
 mod common;
 
-// Tests that process memory does not excessively rise after 1000 HTTP 1.0
+// Tests that process memory does not excessively rise after 20,000 HTTP 1.0
 // requests.
 #[test]
-fn test_memory_after_1000_requests() {
+fn test_memory_after_20_000_requests() {
+    // Skip this test on Travis CI MacOS because it does not have procinfo.
+    if std::env::consts::OS != "linux" {
+        return;
+    }
+
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -31,7 +36,7 @@ fn test_memory_after_1000_requests() {
     // up space in RAM.
     let memory_before = procinfo::pid::statm_self().unwrap().resident;
 
-    let nr_requests = 20000;
+    let nr_requests = 20_000;
     let concurrency = 4;
 
     let mut parallel = Vec::new();
