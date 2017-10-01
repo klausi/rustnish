@@ -1,5 +1,6 @@
 // This test uses procinfo, so can only be run on Linux.
-#[cfg(target_os = "linux")]
+#![cfg(target_os = "linux")]
+
 extern crate futures;
 extern crate hyper;
 extern crate procinfo;
