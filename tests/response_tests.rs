@@ -1,5 +1,5 @@
-extern crate hyper;
 extern crate futures;
+extern crate hyper;
 extern crate rustnish;
 extern crate tokio_core;
 
@@ -54,9 +54,7 @@ fn test_pass_through() {
     // Check that an X-Forwarded-For header was added on the request.
     assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
 
-    assert!(result.contains(
-        &format!("\"X-Forwarded-Port\": \"{}\"", port),
-    ));
+    assert!(result.contains(&format!("\"X-Forwarded-Port\": \"{}\"", port),));
 }
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
@@ -158,7 +156,5 @@ fn test_post_request() {
     // Check that an X-Forwarded-For header was added on the request.
     assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
 
-    assert!(result.contains(
-        &format!("\"X-Forwarded-Port\": \"{}\"", port),
-    ));
+    assert!(result.contains(&format!("\"X-Forwarded-Port\": \"{}\"", port),));
 }

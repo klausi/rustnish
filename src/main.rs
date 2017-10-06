@@ -1,7 +1,7 @@
 #![deny(warnings)]
 
-extern crate rustnish;
 extern crate error_chain;
+extern crate rustnish;
 
 
 fn main() {

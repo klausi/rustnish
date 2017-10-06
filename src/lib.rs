@@ -1,8 +1,8 @@
-extern crate hyper;
-extern crate futures;
-extern crate tokio_core;
 #[macro_use]
 extern crate error_chain;
+extern crate futures;
+extern crate hyper;
+extern crate tokio_core;
 
 use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
@@ -35,7 +35,7 @@ type UpstreamResponse = futures::Then<
     FutureResponse,
     FutureResult<Response, hyper::Error>,
     fn(std::result::Result<Response, hyper::Error>)
-       -> FutureResult<Response, hyper::Error>,
+        -> FutureResult<Response, hyper::Error>,
 >;
 
 impl Service for Proxy {
@@ -52,7 +52,6 @@ impl Service for Proxy {
                         .with_status(StatusCode::BadRequest)
                         .with_body("No host header in request"),
                 ));
-
             }
             // Copy the string out of the request to avoid borrow checker
             // immutability errors later.
@@ -62,8 +61,9 @@ impl Service for Proxy {
         // Copy the request URI out of the request to avoid borrow checker
         // immutability errors later.
         let request_uri = request.uri().to_owned();
-        let upstream_string_uri = "http://".to_string() + &host + ":" +
-            &self.upstream_port.to_string() + request_uri.path();
+        let upstream_string_uri = "http://".to_string() + &host + ":"
+            + &self.upstream_port.to_string()
+            + request_uri.path();
 
         let upstream_uri = match upstream_string_uri.parse() {
             Ok(u) => u,
@@ -105,9 +105,8 @@ impl Service for Proxy {
 
                     // Append a "Server" header if not already present.
                     if !headers.has::<hyper::header::Server>() {
-                        headers.set::<hyper::header::Server>(
-                            hyper::header::Server::new("rustnish"),
-                        );
+                        headers
+                            .set::<hyper::header::Server>(hyper::header::Server::new("rustnish"));
                     }
 
                     response.with_headers(headers)
@@ -126,21 +125,16 @@ impl Service for Proxy {
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let thread = start_server_background(port, upstream_port).chain_err(
-        || "Spawning server thread failed",
-    )?;
+    let thread =
+        start_server_background(port, upstream_port).chain_err(|| "Spawning server thread failed")?;
     match thread.join() {
-        Ok(thread_result) => {
-            match thread_result {
-                Ok(_) => bail!("The server thread finished unexpectedly"),
-                Err(error) => {
-                    Err(Error::with_chain(
-                        error,
-                        "The server thread stopped with an error",
-                    ))
-                }
-            }
-        }
+        Ok(thread_result) => match thread_result {
+            Ok(_) => bail!("The server thread finished unexpectedly"),
+            Err(error) => Err(Error::with_chain(
+                error,
+                "The server thread stopped with an error",
+            )),
+        },
         // I would love to pass up the error here, but it is a Box and I don't
         // know how to do that.
         Err(_) => bail!("The server thread panicked"),

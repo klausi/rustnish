@@ -1,5 +1,5 @@
-extern crate hyper;
 extern crate futures;
+extern crate hyper;
 extern crate rustnish;
 extern crate tokio_core;
 
@@ -24,10 +24,9 @@ fn test_x_forwarded_for_added() {
         .parse()
         .unwrap();
     let mut request = Request::new(Method::Get, url);
-    request.headers_mut().set_raw(
-        "X-Forwarded-For",
-        "1.2.3.4".to_string(),
-    );
+    request
+        .headers_mut()
+        .set_raw("X-Forwarded-For", "1.2.3.4".to_string());
 
     let response = common::client_request(request);
 
@@ -41,9 +40,7 @@ fn test_x_forwarded_for_added() {
     );
 
     // Check that an X-Forwarded-For header was added on the request.
-    assert!(result.contains(
-        "\"X-Forwarded-For\": \"1.2.3.4, 127.0.0.1\"",
-    ));
+    assert!(result.contains("\"X-Forwarded-For\": \"1.2.3.4, 127.0.0.1\"",));
 }
 
 // Tests that if a Via header already exists on the request then the proxy adds

@@ -1,5 +1,5 @@
-extern crate hyper;
 extern crate futures;
+extern crate hyper;
 
 use hyper::{Client, Method, Uri};
 use hyper::server::{Http, Request, Response, Service};
