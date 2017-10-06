@@ -109,8 +109,7 @@ of our desired value 9090. If you try
 
 ## Postponing the offset calculation
 
-Thanks to a [tip from Steven Fackler]
-(https://users.rust-lang.org/t/how-do-you-access-static-variables-in-a-thread-safe-manner/12792/2)
+Thanks to a [tip from Steven Fackler](https://users.rust-lang.org/t/how-do-you-access-static-variables-in-a-thread-safe-manner/12792/2)
 we can postpone our offset to the very end:
 
 ```rust
