@@ -171,7 +171,7 @@ pub fn start_server_background(
             let client = Client::new(&handle);
 
             let server = listener.incoming()
-                .sleep_on_error(Duration::from_millis(100), &handle2)
+                .sleep_on_error(Duration::from_millis(10), &handle2)
                 .map(move |(sock, addr)| {
                     http.bind_connection(
                         &handle,
@@ -184,8 +184,8 @@ pub fn start_server_background(
                         },
                     );
                     Ok(())
-            // Maximum of 1000 connections simultaneously.
-            }).listen(1000);
+            // Maximum of 10,000 connections simultaneously.
+            }).listen(10_000);
             ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
 
             println!("Listening on http://{}", address);
