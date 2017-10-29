@@ -189,7 +189,9 @@ pub fn start_server_background(
             ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
 
             println!("Listening on http://{}", address);
-            core.run(server).unwrap();
+            // The core run must never finish. If it does then we have no error
+            // message, so there is nothing else we can say about it.
+            let _empty_result = core.run(server);
             bail!("The Tokio core run ended unexpectedly");
         })
         .chain_err(|| "Spawning server thread failed")?;
