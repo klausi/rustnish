@@ -2,6 +2,7 @@
 extern crate error_chain;
 extern crate futures;
 extern crate hyper;
+extern crate tk_listen;
 extern crate tokio_core;
 
 use hyper::Client;
@@ -16,8 +17,10 @@ use hyper::header::Host;
 use hyper::StatusCode;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 use errors::*;
 use hyper::HttpVersion;
+use tk_listen::ListenExt;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -161,28 +164,32 @@ pub fn start_server_background(
             // client.
             let mut core = Core::new().chain_err(|| "Failed to create Tokio core")?;
             let handle = core.handle();
+            let handle2 = core.handle();
             let http = Http::new();
             let listener = TcpListener::bind(&address, &handle)
                 .chain_err(|| format!("Failed to bind server to address {}", address))?;
             let client = Client::new(&handle);
 
-            let server = listener.incoming().for_each(move |(sock, addr)| {
-                http.bind_connection(
-                    &handle,
-                    sock,
-                    addr,
-                    Proxy {
-                        port: port,
-                        upstream_port: upstream_port,
-                        client: client.clone(),
-                    },
-                );
-                Ok(())
-            });
+            let server = listener.incoming()
+                .sleep_on_error(Duration::from_millis(100), &handle2)
+                .map(move |(sock, addr)| {
+                    http.bind_connection(
+                        &handle,
+                        sock,
+                        addr,
+                        Proxy {
+                            port: port,
+                            upstream_port: upstream_port,
+                            client: client.clone(),
+                        },
+                    );
+                    Ok(())
+            // Maximum of 1000 connections simultaneously.
+            }).listen(1000);
             ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
 
             println!("Listening on http://{}", address);
-            core.run(server).chain_err(|| "Tokio core run failed")?;
+            core.run(server).unwrap();
             bail!("The Tokio core run ended unexpectedly");
         })
         .chain_err(|| "Spawning server thread failed")?;

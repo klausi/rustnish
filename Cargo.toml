@@ -8,6 +8,7 @@ hyper = ">=0.11.4"
 futures = ">=0.1.14"
 tokio-core = ">=0.1.8"
 error-chain = ">=0.11.0"
+tk-listen = ">=0.1.1"
 
 # Memory Leak tests require procinfo, which only works on Linux.
 [target.'cfg(target_os="linux")'.dev-dependencies]
