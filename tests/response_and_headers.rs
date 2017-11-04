@@ -16,7 +16,7 @@ fn test_pass_through() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    // Start a dummy server on port 9091 that just echoes the request.
+    // Start a dummy server that just echoes the request.
     let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
 
     // Start our reverse proxy which forwards to the dummy server.
@@ -163,8 +163,8 @@ fn test_post_request() {
 // the proxy adds another value.
 #[test]
 fn test_x_forwarded_for_added() {
-    let port = 9099;
-    let upstream_port = 9100;
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
 
     let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
     let _proxy = rustnish::start_server_background(port, upstream_port);
