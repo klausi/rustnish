@@ -11,6 +11,8 @@ rust:
   - nightly
   - stable
 
+# OSX with Rust nightly fails because of cargo cache error
+# "error: failed to remove: /Users/travis/build/klausi/rustnish/target/debug/rustnish.dSYM"
 matrix:
   allow_failures:
     - os: osx
