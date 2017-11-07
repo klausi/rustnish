@@ -27,9 +27,9 @@ fn test_ports_exhausted() {
     let addr_string = format!("localhost:{}", port);
     let addr = addr_string.to_socket_addrs().unwrap().next().unwrap();
 
-    // Send 100k requests (TCP connections).
-    let nr_requests = 100_000;
-    let concurrency = 10_000;
+    // Send 10 million requests (TCP connections).
+    let nr_requests = 10_000_000;
+    let concurrency = 100_000;
 
     let mut parallel = Vec::new();
     for _i in 0..concurrency {
