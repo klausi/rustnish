@@ -50,8 +50,11 @@ fn test_ports_exhausted() {
 
     let work = join_all(parallel);
     core.run(work).unwrap();
+    // After all the work of establishing the Tokio core drop it now which will
+    // hopefully tear down the connections.
+    drop(core);
 
-    // After all those requests our server shoudl still be alive and well.
+    // After all those requests our server should still be alive and well.
     let url = ("http://127.0.0.1:".to_string() + &port.to_string())
         .parse()
         .unwrap();
