@@ -63,16 +63,24 @@ Headers for responses returned downstream:
   didn't add it first.
 
 ## Goal 7: Add integration test that watches for memory leaks
-Completed: yes
+Completed: no, because impossible
 
 Add an integration test that ensures that the proxy server is not leaking memory
 (growing RAM usage without shrinking again). Use /proc information to compare
 memory usage of the current process before and after the test.
 
+**Update**: The test case was not stable enough, it had random test fails and
+had to be removed. Watching and asserting /proc memory information is not
+reliable.
+
 ## Goal 8: Make Tokio/Hyper server resilient
-Completed: no
+Completed: partially
 
 There is a [known flaw](https://github.com/hyperium/hyper/issues/1358) in the
 Tokio/Hyper libraries that stops server execution under high load. Implement a
 workaround to make the proxy more resilient. Ensure that the server does not
 stop under such an attack and still delivers valid responses after the attack.
+
+**Update**: The test case was not stable enough, it had random test fails and
+had to be removed. Simulating an attack with millions of requests was not
+reliable and made different parts of the test case fail.
