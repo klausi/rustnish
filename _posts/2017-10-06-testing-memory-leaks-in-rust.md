@@ -66,6 +66,8 @@ after reporting it to the author he committed a fix. Thanks Sean McArthur!
 
 ## Automating a memory leak test
 
+**Update 2018-01-07: It turns out that the automated test described here is unstable and has random test fails. Procinfo is probably not exact enough, so this does not work reliably.**
+
 Now that the memory leak is fixed we want to make sure it does not happen
 again. We can setup an integration test that runs on Travis CI whenever code is
 changed. The strategy for such a test is similar to what we did manually:
