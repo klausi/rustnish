@@ -15,6 +15,7 @@ use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
+use std::net::SocketAddr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -31,14 +32,15 @@ struct Proxy {
     port: u16,
     upstream_port: u16,
     client: Client<HttpConnector>,
+    // The socket address the original request is coming from.
+    source_address: SocketAddr,
 }
 
 type DirectResponse = FutureResult<Response, hyper::Error>;
 type UpstreamResponse = futures::Then<
     FutureResponse,
     FutureResult<Response, hyper::Error>,
-    fn(std::result::Result<Response, hyper::Error>)
-        -> FutureResult<Response, hyper::Error>,
+    fn(std::result::Result<Response, hyper::Error>) -> FutureResult<Response, hyper::Error>,
 >;
 
 impl Service for Proxy {
@@ -84,11 +86,11 @@ impl Service for Proxy {
 
         request.set_uri(upstream_uri);
 
-        if let Some(socket_address) = request.remote_addr() {
+        {
             let headers = request.headers_mut();
-            headers.append_raw("X-Forwarded-For", socket_address.ip().to_string());
+            headers.append_raw("X-Forwarded-For", self.source_address.ip().to_string());
             headers.append_raw("X-Forwarded-Port", self.port.to_string());
-        };
+        }
 
         Either::B(self.client.request(request).then(|result| {
             let our_response = match result {
@@ -181,6 +183,7 @@ pub fn start_server_background(
                             port: port,
                             upstream_port: upstream_port,
                             client: client.clone(),
+                            source_address: addr,
                         },
                     );
                     Ok(())

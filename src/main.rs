@@ -3,7 +3,6 @@
 extern crate error_chain;
 extern crate rustnish;
 
-
 fn main() {
     let port: u16 = 9090;
     let upstream_port: u16 = 80;
