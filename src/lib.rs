@@ -2,26 +2,25 @@
 extern crate error_chain;
 extern crate futures;
 extern crate hyper;
-extern crate tk_listen;
+extern crate num_cpus;
 extern crate tokio_core;
 
 use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
-use tokio_core::net::TcpListener;
+use std::net::TcpListener;
 use tokio_core::reactor::Core;
 use futures::{Future, Stream};
 use futures::future::{Either, FutureResult};
+use futures::sync::mpsc;
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
 use hyper::header::Host;
 use hyper::StatusCode;
 use std::net::SocketAddr;
-use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 use errors::*;
 use hyper::HttpVersion;
-use tk_listen::ListenExt;
+use tokio_core::net::TcpStream;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -153,49 +152,43 @@ pub fn start_server_background(
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
     // out the signal we can return.
-    let (ready_tx, ready_rx) = mpsc::channel();
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
 
     let thread = thread::Builder::new()
         .name("rustnish".to_owned())
         // Even if our thread returns nothing but errors the Rust convention is
         // to always do that in the form of a Result type.
         .spawn(move || -> Result<()> {
-            let address = ([127, 0, 0, 1], port).into();
+            let address: SocketAddr = ([127, 0, 0, 1], port).into();
 
-            // Prepare a Tokio core that we will use for our server and our
-            // client.
-            let mut core = Core::new().chain_err(|| "Failed to create Tokio core")?;
-            let handle = core.handle();
-            let handle2 = core.handle();
-            let http = Http::new();
-            let listener = TcpListener::bind(&address, &handle)
-                .chain_err(|| format!("Failed to bind server to address {}", address))?;
-            let client = Client::new(&handle);
-
-            let server = listener.incoming()
-                .sleep_on_error(Duration::from_millis(10), &handle2)
-                .map(move |(sock, addr)| {
-                    http.bind_connection(
-                        &handle,
-                        sock,
-                        addr,
-                        Proxy {
-                            port: port,
-                            upstream_port: upstream_port,
-                            client: client.clone(),
-                            source_address: addr,
-                        },
-                    );
-                    Ok(())
-            // Maximum of 10,000 connections simultaneously.
-            }).listen(10_000);
+            // Use `std::net` to bind the requested port, we'll use this on the main
+            // thread below
+            let listener = TcpListener::bind(&address).chain_err(|| format!("Failed to bind server to address {}", address))?;
+            let num_cpus = num_cpus::get();
             ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
+            println!("Listening on http://{} using {} worker threads", address, num_cpus);
 
-            println!("Listening on http://{}", address);
-            // The core run must never finish. If it does then we have no error
-            // message, so there is nothing else we can say about it.
-            let _empty_result = core.run(server);
-            bail!("The Tokio core run ended unexpectedly");
+            // Spin up our worker threads, creating a channel routing to each worker
+            // thread that we'll use below.
+            let mut channels = Vec::new();
+            for _ in 0..num_cpus {
+                let (tx, rx) = mpsc::unbounded();
+                channels.push(tx);
+                thread::spawn(move || worker(rx, port, upstream_port));
+            }
+
+            // Infinitely accept sockets from our `std::net::TcpListener`, as this'll do
+            // blocking I/O. Each socket is then shipped round-robin to a particular
+            // thread which will associate the socket with the corresponding event loop
+            // and process the connection.
+            let mut next = 0;
+            for socket in listener.incoming() {
+                let socket = socket.chain_err(|| "Failed to accept TCP connection")?;
+                channels[next].unbounded_send(socket).chain_err(|| "worker thread died")?;
+                next = (next + 1) % channels.len();
+            }
+
+            bail!("The TCP listener stopped unexpectedly");
         })
         .chain_err(|| "Spawning server thread failed")?;
 
@@ -205,4 +198,58 @@ pub fn start_server_background(
     let _bind_ready = ready_rx.recv();
 
     Ok(thread)
+}
+
+// Represents one worker thread of the server that receives TCP connections from
+// the main server thread.
+fn worker(rx: mpsc::UnboundedReceiver<std::net::TcpStream>, port: u16, upstream_port: u16) {
+    let mut core = Core::new().unwrap();
+    let handle = core.handle();
+    let http = Http::<hyper::Chunk>::new();
+    let client = Client::new(&handle);
+
+    let done = rx.for_each(move |socket| {
+        // First up when we receive a socket we associate it with our event loop
+        // using the `TcpStream::from_stream` API. After that the socket is not
+        // a `tokio_core::net::TcpStream` meaning it's in nonblocking mode and
+        // ready to be used with Tokio
+        let socket = match TcpStream::from_stream(socket, &handle) {
+            Ok(socket) => socket,
+            Err(error) => {
+                println!(
+                    "Failed to read TCP stream, ignoring connection. Error: {}",
+                    error
+                );
+                return Ok(());
+            }
+        };
+        let addr = match socket.peer_addr() {
+            Ok(addr) => addr,
+            Err(error) => {
+                println!(
+                    "Failed to get remote address, ignoring connection. Error: {}",
+                    error
+                );
+                return Ok(());
+            }
+        };
+
+        let connection = http.serve_connection(
+            socket,
+            Proxy {
+                port: port,
+                upstream_port: upstream_port,
+                client: client.clone(),
+                source_address: addr,
+            },
+        ).map(|_| ())
+            .map_err(move |err| println!("server connection error: ({}) {}", addr, err));
+
+        handle.spawn(connection);
+        Ok(())
+    });
+    match core.run(done) {
+        Ok(_) => println!("Worker tokio core run ended unexpectedly"),
+        Err(_) => println!("Worker tokio core run error."),
+    };
 }
