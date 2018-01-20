@@ -183,7 +183,12 @@ pub fn start_server_background(
             // and process the connection.
             let mut next = 0;
             for socket in listener.incoming() {
-                let socket = socket.chain_err(|| "Failed to accept TCP connection")?;
+                let socket = match socket {
+                    Ok(socket) => socket,
+                    // Ignore socket errors like "Too many open files" on the OS
+                    // level. Just continue with the next request.
+                    Err(_) => continue,
+                };
                 channels[next].unbounded_send(socket).chain_err(|| "worker thread died")?;
                 next = (next + 1) % channels.len();
             }
