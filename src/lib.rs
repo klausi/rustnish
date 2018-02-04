@@ -14,7 +14,6 @@ use futures::future::{Either, FutureResult};
 use futures::sync::mpsc;
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
-use hyper::header::Host;
 use hyper::StatusCode;
 use std::net::SocketAddr;
 use std::thread;
@@ -49,25 +48,13 @@ impl Service for Proxy {
     type Future = Either<DirectResponse, UpstreamResponse>;
 
     fn call(&self, mut request: Request) -> Self::Future {
-        let host = match request.headers().get::<Host>() {
-            None => {
-                return Either::A(futures::future::ok(
-                    Response::new()
-                        .with_status(StatusCode::BadRequest)
-                        .with_body("No host header in request"),
-                ));
-            }
-            // Copy the string out of the request to avoid borrow checker
-            // immutability errors later.
-            Some(h) => h.hostname().to_owned(),
-        };
-
         // Copy the request URI out of the request to avoid borrow checker
         // immutability errors later.
         let request_uri = request.uri().to_owned();
-        let upstream_string_uri = "http://".to_string() + &host + ":"
-            + &self.upstream_port.to_string()
-            + request_uri.path();
+        // 127.0.0.1 is hard coded here for now because we assume that upstream
+        // is on the same host. Should be made configurable later.
+        let upstream_string_uri =
+            "http://127.0.0.1:".to_string() + &self.upstream_port.to_string() + request_uri.path();
 
         let upstream_uri = match upstream_string_uri.parse() {
             Ok(u) => u,
