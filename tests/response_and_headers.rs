@@ -242,3 +242,28 @@ fn test_server_header_present() {
         .to_string();
     assert_eq!(server_header, "dummy-server");
 }
+
+// Tests that URL query parameters are passed through.
+#[test]
+fn test_query_parameters() {
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
+
+    let _post_server = common::start_dummy_server(upstream_port, |r| r);
+
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    // Make a request to the proxy and check if we get the correct result back.
+    let url = ("http://127.0.0.1:".to_string() + &port.to_string() + "/test?key=value")
+        .parse()
+        .unwrap();
+    let response = common::client_get(url);
+
+    let body = response.body().concat2().wait().unwrap();
+    let result = str::from_utf8(&body).unwrap();
+
+    assert_eq!(
+        "Request { method: Get, uri: \"/test?key=value\", version: Http11, remote_ad",
+        &result[..63]
+    );
+}
