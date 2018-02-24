@@ -48,25 +48,30 @@ impl Service for Proxy {
     type Future = Either<DirectResponse, UpstreamResponse>;
 
     fn call(&self, mut request: Request) -> Self::Future {
-        // Copy the request URI out of the request to avoid borrow checker
-        // immutability errors later.
-        let request_uri = request.uri().to_owned();
-        // 127.0.0.1 is hard coded here for now because we assume that upstream
-        // is on the same host. Should be made configurable later.
-        let upstream_string_uri =
-            "http://127.0.0.1:".to_string() + &self.upstream_port.to_string() + request_uri.path();
-
-        let upstream_uri = match upstream_string_uri.parse() {
-            Ok(u) => u,
-            _ => {
-                // We can't actually test this because parsing the URI never
-                // fails. However, should that change at any point this is the
-                // right thing to do.
-                return Either::A(futures::future::ok(
-                    Response::new()
-                        .with_status(StatusCode::BadRequest)
-                        .with_body("Invalid host header in request"),
-                ));
+        let upstream_uri = {
+            // 127.0.0.1 is hard coded here for now because we assume that upstream
+            // is on the same host. Should be made configurable later.
+            let mut upstream_uri = format!(
+                "http://127.0.0.1:{}{}",
+                self.upstream_port,
+                request.uri().path()
+            );
+            if let Some(query) = request.query() {
+                upstream_uri.push('?');
+                upstream_uri.push_str(query);
+            }
+            match upstream_uri.parse() {
+                Ok(u) => u,
+                _ => {
+                    // We can't actually test this because parsing the URI never
+                    // fails. However, should that change at any point this is the
+                    // right thing to do.
+                    return Either::A(futures::future::ok(
+                        Response::new()
+                            .with_status(StatusCode::BadRequest)
+                            .with_body("Invalid upstream URI"),
+                    ));
+                }
             }
         };
 

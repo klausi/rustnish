@@ -263,7 +263,7 @@ fn test_query_parameters() {
     let result = str::from_utf8(&body).unwrap();
 
     assert_eq!(
-        "Request { method: Get, uri: \"/test?key=value\", version: Http11, remote_ad",
-        &result[..63]
+        "Request { method: Get, uri: \"/test?key=value\", version: Http11, remote_addr:",
+        &result[..76]
     );
 }
