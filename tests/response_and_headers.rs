@@ -12,7 +12,7 @@ use std::str;
 mod common;
 
 #[test]
-fn test_pass_through() {
+fn pass_through() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -59,7 +59,7 @@ fn test_pass_through() {
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
 #[test]
-fn test_upstream_down() {
+fn upstream_down() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -80,7 +80,7 @@ fn test_upstream_down() {
 
 // Tests that an invalid HTTP host header does not cause a panic.
 #[test]
-fn test_invalid_host() {
+fn invalid_host() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -104,7 +104,7 @@ fn test_invalid_host() {
 
 // Tests the error result if a port is already occupied on this host.
 #[test]
-fn test_port_occupied() {
+fn port_occupied() {
     // Use the same port for upstream server and proxy, which will cause an
     // error.
     let port = common::get_free_port();
@@ -130,7 +130,7 @@ fn test_port_occupied() {
 
 // Tests that POST requests are also passed through.
 #[test]
-fn test_post_request() {
+fn post_request() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -162,7 +162,7 @@ fn test_post_request() {
 // Tests that if an X-Forwarded-For header already exists on the request then
 // the proxy adds another value.
 #[test]
-fn test_x_forwarded_for_added() {
+fn x_forwarded_for_added() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -195,7 +195,7 @@ fn test_x_forwarded_for_added() {
 // Tests that if a Via header already exists on the request then the proxy adds
 // another value.
 #[test]
-fn test_via_header_added() {
+fn via_header_added() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -221,7 +221,7 @@ fn test_via_header_added() {
 // Tests that if a Server HTTP header is present from upstream it is not
 // overwritten.
 #[test]
-fn test_server_header_present() {
+fn server_header_present() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
@@ -245,7 +245,7 @@ fn test_server_header_present() {
 
 // Tests that URL query parameters are passed through.
 #[test]
-fn test_query_parameters() {
+fn query_parameters() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
