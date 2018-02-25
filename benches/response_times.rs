@@ -69,47 +69,35 @@ fn c_100_requests_varnish(b: &mut test::Bencher) {
 }
 
 #[bench]
-fn d_1_000_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
-    bench_requests(b, 100, 1, 9090);
-}
-
-#[bench]
-fn d_1_000_requests_varnish(b: &mut test::Bencher) {
-    // Assume Varnish is already running.
-    bench_requests(b, 100, 1, 6081);
-}
-
-#[bench]
-fn e_10_parallel_requests(b: &mut test::Bencher) {
+fn d_10_parallel_requests(b: &mut test::Bencher) {
     rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 10, 10, 9090);
 }
 
 #[bench]
-fn e_10_parallel_requests_varnish(b: &mut test::Bencher) {
+fn d_10_parallel_requests_varnish(b: &mut test::Bencher) {
     // Assume Varnish is already running.
     bench_requests(b, 10, 10, 6081);
 }
 
 #[bench]
-fn f_100_parallel_requests(b: &mut test::Bencher) {
+fn e_100_parallel_requests(b: &mut test::Bencher) {
     bench_requests(b, 100, 10, 9090);
 }
 
 #[bench]
-fn f_100_parallel_requests_varnish(b: &mut test::Bencher) {
+fn e_100_parallel_requests_varnish(b: &mut test::Bencher) {
     // Assume Varnish is already running.
     bench_requests(b, 100, 10, 6081);
 }
 
 #[bench]
-fn g_1_000_parallel_requests(b: &mut test::Bencher) {
+fn f_1_000_parallel_requests(b: &mut test::Bencher) {
     bench_requests(b, 1_000, 100, 9090);
 }
 
 #[bench]
-fn g_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
+fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
     // Assume Varnish is already running.
     bench_requests(b, 1_000, 100, 6081);
 }
