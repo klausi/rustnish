@@ -85,8 +85,7 @@ impl Service for Proxy {
 
         Either::B(self.client.request(request).then(|result| {
             let our_response = match result {
-                Ok(response) => {
-                    let mut headers = response.headers().clone();
+                Ok(mut response) => {
                     let version = match response.version() {
                         HttpVersion::Http09 => "0.9",
                         HttpVersion::Http10 => "1.0",
@@ -97,15 +96,20 @@ impl Service for Proxy {
                         // anyway.
                         _ => "?",
                     };
-                    headers.append_raw("Via", format!("{} rustnish-0.0.1", version));
+                    {
+                        let mut headers = response.headers_mut();
 
-                    // Append a "Server" header if not already present.
-                    if !headers.has::<hyper::header::Server>() {
-                        headers
-                            .set::<hyper::header::Server>(hyper::header::Server::new("rustnish"));
+                        headers.append_raw("Via", format!("{} rustnish-0.0.1", version));
+
+                        // Append a "Server" header if not already present.
+                        if !headers.has::<hyper::header::Server>() {
+                            headers.set::<hyper::header::Server>(hyper::header::Server::new(
+                                "rustnish",
+                            ));
+                        }
                     }
 
-                    response.with_headers(headers)
+                    response
                 }
                 Err(_) => {
                     // For security reasons do not show the exact error to end users.
