@@ -1,5 +1,23 @@
 #![feature(test)]
 
+// Performs various timing tests on Rustnish and Varnish.
+// Execute with `cargo bench`
+// Varnish must be running and configured to listen on port 6081. The backend
+// port must be set to 9091.
+// Example Varnish configuration in /etc/varnish/default.vcl:
+// ```
+// vcl 4.0;
+// # Default backend definition. Set this to point to your content server.
+// backend default {
+//    .host = "127.0.0.1";
+//    .port = "9091";
+// }
+//
+// sub vcl_recv {
+//    return (pass);
+// }
+// ```
+
 extern crate futures;
 extern crate hyper;
 extern crate rustnish;
@@ -7,6 +25,7 @@ extern crate test;
 extern crate tokio_core;
 
 use futures::{future, Future, Stream};
+use futures::future::{join_all, loop_fn, Loop};
 use tokio_core::reactor::{Core, Handle};
 use tokio_core::net::TcpListener;
 
@@ -14,53 +33,126 @@ use hyper::header::{ContentLength, ContentType};
 use hyper::server::{self, Service};
 
 #[bench]
-fn one_request(b: &mut test::Bencher) {
-    let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    spawn_hello(&handle);
-
+fn a_1_request(b: &mut test::Bencher) {
     rustnish::start_server_background(9090, 9091).unwrap();
-
-    let client = hyper::Client::new(&handle);
-
-    let url: hyper::Uri = "http://127.0.0.1:9090/get".parse().unwrap();
-
-    b.iter(move || {
-        let work = client.get(url.clone()).and_then(|res| {
-            assert_eq!(
-                res.status(),
-                hyper::StatusCode::Ok,
-                "Rustnish did not return a 200 HTTP status code"
-            );
-            // Read response body until the end.
-            res.body().for_each(|_chunk| Ok(()))
-        });
-
-        core.run(work).unwrap();
-    });
+    bench_requests(b, 1, 1, 9090);
 }
 
 #[bench]
-fn one_request_varnish(b: &mut test::Bencher) {
+fn a_1_request_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 1, 1, 6081);
+}
+
+#[bench]
+fn b_10_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
+    bench_requests(b, 10, 1, 9090);
+}
+
+#[bench]
+fn b_10_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 10, 1, 6081);
+}
+
+#[bench]
+fn c_100_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
+    bench_requests(b, 100, 1, 9090);
+}
+
+#[bench]
+fn c_100_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 100, 1, 6081);
+}
+
+#[bench]
+fn d_1_000_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
+    bench_requests(b, 100, 1, 9090);
+}
+
+#[bench]
+fn d_1_000_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 100, 1, 6081);
+}
+
+#[bench]
+fn e_10_parallel_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
+    bench_requests(b, 10, 10, 9090);
+}
+
+#[bench]
+fn e_10_parallel_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 10, 10, 6081);
+}
+
+#[bench]
+fn f_100_parallel_requests(b: &mut test::Bencher) {
+    bench_requests(b, 100, 10, 9090);
+}
+
+#[bench]
+fn f_100_parallel_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 100, 10, 6081);
+}
+
+#[bench]
+fn g_1_000_parallel_requests(b: &mut test::Bencher) {
+    bench_requests(b, 1_000, 100, 9090);
+}
+
+#[bench]
+fn g_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
+    bench_requests(b, 1_000, 100, 6081);
+}
+
+fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_port: u16) {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     spawn_hello(&handle);
 
     let client = hyper::Client::new(&handle);
 
-    let url: hyper::Uri = "http://127.0.0.1:6081/get".parse().unwrap();
+    let url: hyper::Uri = format!("http://127.0.0.1:{}/get", proxy_port)
+        .parse()
+        .unwrap();
 
     b.iter(move || {
-        let work = client.get(url.clone()).and_then(|res| {
-            assert_eq!(
-                res.status(),
-                hyper::StatusCode::Ok,
-                "Varnish did not return a 200 HTTP status code. Make sure Varnish is configured on port 6081 and the backend port is set to 9091 in /etc/varnish/default.vcl"
-            );
-            // Read response body until the end.
-            res.body().for_each(|_chunk| Ok(()))
-        });
+        let mut parallel = Vec::new();
+        for _i in 0..concurrency {
+            let requests_til_done = loop_fn(0, |counter| {
+                client
+                    .get(url.clone())
+                    .and_then(|res| {
+                        assert_eq!(
+                            res.status(),
+                            hyper::StatusCode::Ok,
+                            "Varnish did not return a 200 HTTP status code. Make sure Varnish is configured on port {} and the backend port is set to 9091 in /etc/varnish/default.vcl",
+                            proxy_port
+                        );
+                        // Read response body until the end.
+                        res.body().for_each(|_chunk| Ok(()))
+                    })
+                    .and_then(move |_| -> Result<_, hyper::Error> {
+                        if counter < (amount / concurrency) {
+                            Ok(Loop::Continue(counter + 1))
+                        } else {
+                            Ok(Loop::Break(counter))
+                        }
+                    })
+            });
+            parallel.push(requests_til_done);
+        }
 
+        let work = join_all(parallel);
         core.run(work).unwrap();
     });
 }
