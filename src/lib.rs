@@ -7,11 +7,9 @@ extern crate tokio_core;
 
 use hyper::Client;
 use hyper::server::{Http, Request, Response, Service};
-use std::net::TcpListener;
 use tokio_core::reactor::Core;
 use futures::{Future, Stream};
 use futures::future::{Either, FutureResult};
-use futures::sync::mpsc;
 use hyper::client::HttpConnector;
 use hyper::client::FutureResponse;
 use hyper::StatusCode;
@@ -20,7 +18,7 @@ use std::thread;
 use errors::*;
 use errors::ResultExt;
 use hyper::HttpVersion;
-use tokio_core::net::TcpStream;
+use tokio_core::net::TcpListener;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -159,28 +157,32 @@ pub fn start_server_background(
             let address: SocketAddr = ([127, 0, 0, 1], port).into();
             let mut core = Core::new().unwrap();
             let handle = core.handle();
-            let client = Client::new(&handle);
 
-            let server = Http::new().sleep_on_errors(true).serve_addr_handle(&address, &handle, move || Ok(Proxy {
-                port: port,
-                upstream_port: upstream_port,
-                client: client.clone(),
-                // @todo this is wrong, we want the connection source address.
-                source_address: address,
-            })).chain_err(|| format!("Failed to bind server to address {}", address))?;
+            let listener = TcpListener::bind(&address, &handle)
+                .chain_err(|| format!("Failed to bind server to address {}", address))?;
+            let client = Client::new(&handle);
+            let mut http = Http::<hyper::Chunk>::new();
+            http.sleep_on_errors(true);
+
+            let server = listener.incoming().for_each(move |(socket, addr)| {
+                handle.spawn(
+                    http.serve_connection(socket, Proxy {
+                            port: port,
+                            upstream_port: upstream_port,
+                            client: client.clone(),
+                            source_address: addr,
+                        })
+                        .map(|_| ())
+                        .map_err(|_| ())
+                );
+                Ok(())
+            });
 
             ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
+
             println!("Listening on http://{}", address);
-
-            let handle1 = handle.clone();
-            handle.spawn(server.for_each(move |conn| {
-                handle1.spawn(conn.map(|_| ()).map_err(|err| println!("server error: {:?}", err)));
-                Ok(())
-            }).map_err(|_| ()));
-
-            core.run(futures::future::empty::<(), ()>()).unwrap();
-
-            bail!("The TCP listener stopped unexpectedly");
+            core.run(server).chain_err(|| "Tokio core run error")?;
+            bail!("The Tokio core run ended unexpectedly");
         })
         .chain_err(|| "Spawning server thread failed")?;
 
