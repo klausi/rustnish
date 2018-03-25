@@ -18,6 +18,9 @@ author: klausi
 description: "Experimenting with Rustlang by writing a reverse proxy"
 baseurl: "/rustnish" # the subpath of your site, e.g. /blog
 url: "https://klausi.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+mastodon:
+- username: klausi
+  instance: mastodon.social
 twitter_username: _klausi_
 github_username:  klausi
 
