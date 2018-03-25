@@ -22,12 +22,11 @@ mastodon:
 - username: klausi
   instance: mastodon.social
 twitter_username: _klausi_
-github_username:  klausi
 
 # Build settings
 markdown: kramdown
 theme: minima
-gems:
+plugins:
   - jekyll-feed
 exclude:
   - Gemfile
