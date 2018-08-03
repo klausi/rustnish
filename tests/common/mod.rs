@@ -2,23 +2,25 @@ extern crate futures;
 extern crate hyper;
 
 use hyper::{Client, Method, Uri};
-use hyper::server::{Http, Request, Response, Service};
+use hyper::{Body, Request, Response};
+use hyper::service::Service;
 use std::sync::mpsc;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 use std::thread;
 use futures::Future;
 use tokio_core::reactor::Core;
 use std::str;
+use hyper::server::conn::Http;
 
 struct DummyServer {
-    response_function: fn(Response) -> Response,
+    response_function: fn(Response<Body>) -> Response<Body>,
 }
 
 // A dummy upstream HTTP server for testing that returns the received HTTP
 // request in the response body.
 impl Service for DummyServer {
-    type Request = Request;
-    type Response = Response;
+    type ReqBody = Body;
+    type ResBody = Body;
     type Error = hyper::Error;
     type Future = futures::future::FutureResult<Self::Response, Self::Error>;
 

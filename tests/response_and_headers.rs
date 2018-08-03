@@ -4,10 +4,10 @@ extern crate rustnish;
 extern crate tokio_core;
 
 use hyper::{Method, StatusCode};
-use hyper::header::Host;
-use hyper::server::Request;
+use hyper::Request;
 use futures::{Future, Stream};
 use std::str;
+use hyper::header::{HOST, SERVER};
 
 mod common;
 
@@ -36,7 +36,7 @@ fn pass_through() {
     assert_eq!(
         response
             .headers()
-            .get::<hyper::header::Server>()
+            .get(SERVER)
             .unwrap()
             .to_string(),
         "rustnish"
@@ -71,7 +71,7 @@ fn upstream_down() {
         .unwrap();
     let response = common::client_get(url);
 
-    assert_eq!(StatusCode::BadGateway, response.status());
+    assert_eq!(StatusCode::BAD_GATEWAY, response.status());
     assert_eq!(
         Ok("Something went wrong, please try again later."),
         str::from_utf8(&response.body().concat2().wait().unwrap())
@@ -90,7 +90,7 @@ fn invalid_host() {
         .parse()
         .unwrap();
     let mut request = Request::new(Method::Get, url);
-    request.headers_mut().set(Host::new("$$$", None));
+    request.headers_mut().insert(HOST, "$$$".parse().unwrap());
 
     let response = common::client_request(request);
 
@@ -225,8 +225,9 @@ fn server_header_present() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
-        upstream_response.with_header(hyper::header::Server::new("dummy-server"))
+    let _dummy_server = common::start_dummy_server(upstream_port, |mut upstream_response| {
+        upstream_response.headers_mut().insert(SERVER, "dummy-server".parse().unwrap());
+        upstream_response
     });
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -237,7 +238,7 @@ fn server_header_present() {
 
     let server_header = response
         .headers()
-        .get::<hyper::header::Server>()
+        .get(SERVER)
         .unwrap()
         .to_string();
     assert_eq!(server_header, "dummy-server");

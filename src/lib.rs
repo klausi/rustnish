@@ -6,19 +6,23 @@ extern crate num_cpus;
 extern crate tokio_core;
 
 use hyper::Client;
-use hyper::server::{Http, Request, Response, Service};
+use hyper::{Body, Request, Response};
 use tokio_core::reactor::Core;
 use futures::{Future, Stream};
 use futures::future::{Either, FutureResult};
 use hyper::client::HttpConnector;
-use hyper::client::FutureResponse;
 use hyper::StatusCode;
 use std::net::SocketAddr;
 use std::thread;
 use errors::*;
 use errors::ResultExt;
-use hyper::HttpVersion;
 use tokio_core::net::TcpListener;
+use hyper::Version;
+use hyper::header::SERVER;
+use hyper::service::Service;
+use hyper::server::conn::Http;
+use hyper::client::ResponseFuture;
+use hyper::header::HeaderName;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -33,20 +37,20 @@ struct Proxy {
     source_address: SocketAddr,
 }
 
-type DirectResponse = FutureResult<Response, hyper::Error>;
+type DirectResponse = FutureResult<Response<Body>, hyper::Error>;
 type UpstreamResponse = futures::Then<
-    FutureResponse,
-    FutureResult<Response, hyper::Error>,
-    fn(std::result::Result<Response, hyper::Error>) -> FutureResult<Response, hyper::Error>,
+    ResponseFuture,
+    FutureResult<Response<Body>, hyper::Error>,
+    fn(std::result::Result<Response<Body>, hyper::Error>) -> FutureResult<Response<Body>, hyper::Error>,
 >;
 
 impl Service for Proxy {
-    type Request = Request;
-    type Response = Response;
+    type ReqBody = Body;
+    type ResBody = Body;
     type Error = hyper::Error;
     type Future = Either<DirectResponse, UpstreamResponse>;
 
-    fn call(&self, mut request: Request) -> Self::Future {
+    fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         let upstream_uri = {
             // 127.0.0.1 is hard coded here for now because we assume that upstream
             // is on the same host. Should be made configurable later.
@@ -55,7 +59,7 @@ impl Service for Proxy {
                 self.upstream_port,
                 request.uri().path()
             );
-            if let Some(query) = request.query() {
+            if let Some(query) = request.uri().query() {
                 upstream_uri.push('?');
                 upstream_uri.push_str(query);
             }
@@ -66,45 +70,40 @@ impl Service for Proxy {
                     // fails. However, should that change at any point this is the
                     // right thing to do.
                     return Either::A(futures::future::ok(
-                        Response::new()
-                            .with_status(StatusCode::BadRequest)
-                            .with_body("Invalid upstream URI"),
+                        Response::builder()
+                            .status(StatusCode::BAD_REQUEST)
+                            .body("Invalid upstream URI".into())
+                            .unwrap(),
                     ));
                 }
             }
         };
 
-        request.set_uri(upstream_uri);
+        *request.uri_mut() = upstream_uri;
 
         {
             let headers = request.headers_mut();
-            headers.append_raw("X-Forwarded-For", self.source_address.ip().to_string());
-            headers.append_raw("X-Forwarded-Port", self.port.to_string());
+            headers.append(HeaderName::from_static("x-forwarded-for"), self.source_address.ip().to_string().parse().unwrap());
+            headers.append(HeaderName::from_static("x-forwarded-port"), self.port.to_string().parse().unwrap());
         }
 
         Either::B(self.client.request(request).then(|result| {
             let our_response = match result {
                 Ok(mut response) => {
                     let version = match response.version() {
-                        HttpVersion::Http09 => "0.9",
-                        HttpVersion::Http10 => "1.0",
-                        HttpVersion::Http11 => "1.1",
-                        HttpVersion::H2 | HttpVersion::H2c => "2.0",
-                        // Not sure what we should do when we don't know the
-                        // version, this case is probably unreachable code
-                        // anyway.
-                        _ => "?",
+                        Version::HTTP_09 => "0.9",
+                        Version::HTTP_10 => "1.0",
+                        Version::HTTP_11 => "1.1",
+                        Version::HTTP_2 => "2.0",
                     };
                     {
                         let mut headers = response.headers_mut();
 
-                        headers.append_raw("Via", format!("{} rustnish-0.0.1", version));
+                        headers.append(HeaderName::from_static("via"), format!("{} rustnish-0.0.1", version).parse().unwrap());
 
                         // Append a "Server" header if not already present.
-                        if !headers.has::<hyper::header::Server>() {
-                            headers.set::<hyper::header::Server>(hyper::header::Server::new(
-                                "rustnish",
-                            ));
+                        if !headers.contains_key(SERVER) {
+                            headers.insert(SERVER, "rustnish".parse().unwrap());
                         }
                     }
 
@@ -113,9 +112,10 @@ impl Service for Proxy {
                 Err(_) => {
                     // For security reasons do not show the exact error to end users.
                     // @todo Log the error.
-                    Response::new()
-                        .with_status(StatusCode::BadGateway)
-                        .with_body("Something went wrong, please try again later.")
+                    Response::builder()
+                            .status(StatusCode::BAD_GATEWAY)
+                            .body("Something went wrong, please try again later.".into())
+                            .unwrap()
                 }
             };
             futures::future::ok(our_response)
@@ -166,11 +166,8 @@ pub fn start_server_background(
             // addresses.
             let listener = TcpListener::bind(&address, &handle)
                 .chain_err(|| format!("Failed to bind server to address {}", address))?;
-            let client = Client::new(&handle);
-            let mut http = Http::<hyper::Chunk>::new();
-            // Let Hyper swallow IO errors internally to keep the server always
-            // running.
-            http.sleep_on_errors(true);
+            let client = Client::new();
+            let http = Http::new();
 
             let server = listener.incoming().for_each(move |(socket, source_address)| {
                 handle.spawn(
