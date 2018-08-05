@@ -4,10 +4,11 @@ extern crate rustnish;
 extern crate tokio_core;
 
 use hyper::{Method, StatusCode};
-use hyper::Request;
+use hyper::{Body, Request};
 use futures::{Future, Stream};
 use std::str;
 use hyper::header::{HOST, SERVER};
+use common::echo_request;
 
 mod common;
 
@@ -17,7 +18,7 @@ fn pass_through() {
     let upstream_port = common::get_free_port();
 
     // Start a dummy server that just echoes the request.
-    let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
+    let _dummy_server = common::start_dummy_server(upstream_port, echo_request);
 
     // Start our reverse proxy which forwards to the dummy server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
@@ -29,7 +30,7 @@ fn pass_through() {
     let response = common::client_get(url);
 
     assert_eq!(
-        response.headers().get_raw("Via").unwrap(),
+        response.headers().get("Via").unwrap(),
         "1.1 rustnish-0.0.1"
     );
 
@@ -37,12 +38,11 @@ fn pass_through() {
         response
             .headers()
             .get(SERVER)
-            .unwrap()
-            .to_string(),
+            .unwrap(),
         "rustnish"
     );
 
-    let body = response.body().concat2().wait().unwrap();
+    let body = response.into_body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 
     // Check that the request method was GET.
@@ -74,7 +74,7 @@ fn upstream_down() {
     assert_eq!(StatusCode::BAD_GATEWAY, response.status());
     assert_eq!(
         Ok("Something went wrong, please try again later."),
-        str::from_utf8(&response.body().concat2().wait().unwrap())
+        str::from_utf8(&response.into_body().concat2().wait().unwrap())
     );
 }
 
@@ -86,19 +86,19 @@ fn invalid_host() {
 
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
-    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
-        .parse()
-        .unwrap();
-    let mut request = Request::new(Method::Get, url);
-    request.headers_mut().insert(HOST, "$$$".parse().unwrap());
+    let url = "http://127.0.0.1:".to_string() + &port.to_string();
+    let mut request = Request::builder();
+    request
+        .uri(url)
+        .header(HOST, "$$$");
 
-    let response = common::client_request(request);
+    let response = common::client_request(request.body(Body::empty()).unwrap());
 
     // The proxy just tries to forward that as is, but no one is listening.
-    assert_eq!(StatusCode::BadGateway, response.status());
+    assert_eq!(StatusCode::BAD_GATEWAY, response.status());
     assert_eq!(
         Ok("Something went wrong, please try again later."),
-        str::from_utf8(&response.body().concat2().wait().unwrap())
+        str::from_utf8(&response.into_body().concat2().wait().unwrap())
     );
 }
 
@@ -109,7 +109,7 @@ fn port_occupied() {
     // error.
     let port = common::get_free_port();
 
-    let _dummy_server = common::start_dummy_server(port, |r| r);
+    let _dummy_server = common::start_dummy_server(port, echo_request);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
     assert_eq!(
         error_chain.description(),
@@ -134,7 +134,7 @@ fn post_request() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _post_server = common::start_dummy_server(upstream_port, |r| r);
+    let _post_server = common::start_dummy_server(upstream_port, echo_request);
 
     // Start our reverse proxy which forwards to the post server.
     let _proxy = rustnish::start_server_background(port, upstream_port);
@@ -145,7 +145,7 @@ fn post_request() {
         .unwrap();
     let response = common::client_post(url, "abc");
 
-    let body = response.body().concat2().wait().unwrap();
+    let body = response.into_body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 
     assert_eq!(
@@ -166,20 +166,18 @@ fn x_forwarded_for_added() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _dummy_server = common::start_dummy_server(upstream_port, |r| r);
+    let _dummy_server = common::start_dummy_server(upstream_port, echo_request);
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
-    let url = ("http://127.0.0.1:".to_string() + &port.to_string())
-        .parse()
+    let request = Request::builder()
+        .uri("http://127.0.0.1:".to_string() + &port.to_string())
+        .header("X-Forwarded-For", "1.2.3.4")
+        .body(Body::empty())
         .unwrap();
-    let mut request = Request::new(Method::Get, url);
-    request
-        .headers_mut()
-        .set_raw("X-Forwarded-For", "1.2.3.4".to_string());
 
     let response = common::client_request(request);
 
-    let body = response.body().concat2().wait().unwrap();
+    let body = response.into_body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 
     // Check that the request method was GET.
@@ -199,10 +197,13 @@ fn via_header_added() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _dummy_server = common::start_dummy_server(upstream_port, |upstream_response| {
-        let mut headers = upstream_response.headers().clone();
-        headers.append_raw("Via", "1.1 test");
-        upstream_response.with_headers(headers)
+    let _dummy_server = common::start_dummy_server(upstream_port, |request| {
+        let mut response = echo_request(request);
+        {
+        let headers = response.headers_mut();
+        headers.append("Via", "1.1 test".parse().unwrap());
+        }
+        response
     });
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -211,11 +212,8 @@ fn via_header_added() {
         .unwrap();
     let response = common::client_get(url);
 
-    let mut via_headers = response.headers().get_raw("Via").unwrap().iter();
-    let first = str::from_utf8(via_headers.next().unwrap()).unwrap();
-    assert_eq!(first, "1.1 test");
-    let second = str::from_utf8(via_headers.next().unwrap()).unwrap();
-    assert_eq!(second, "1.1 rustnish-0.0.1");
+    let via_headers = response.headers().get("Via").unwrap();
+    assert_eq!(via_headers, "1.1 test, 1.1 rustnish-0.0.1");
 }
 
 // Tests that if a Server HTTP header is present from upstream it is not
@@ -225,9 +223,12 @@ fn server_header_present() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _dummy_server = common::start_dummy_server(upstream_port, |mut upstream_response| {
-        upstream_response.headers_mut().insert(SERVER, "dummy-server".parse().unwrap());
-        upstream_response
+    let _dummy_server = common::start_dummy_server(upstream_port, |request| {
+        let mut response = echo_request(request);
+        {
+        response.headers_mut().insert(SERVER, "dummy-server".parse().unwrap());
+        }
+        response
     });
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -239,8 +240,7 @@ fn server_header_present() {
     let server_header = response
         .headers()
         .get(SERVER)
-        .unwrap()
-        .to_string();
+        .unwrap();
     assert_eq!(server_header, "dummy-server");
 }
 
@@ -250,7 +250,7 @@ fn query_parameters() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
 
-    let _post_server = common::start_dummy_server(upstream_port, |r| r);
+    let _post_server = common::start_dummy_server(upstream_port, echo_request);
 
     let _proxy = rustnish::start_server_background(port, upstream_port);
 
@@ -260,7 +260,7 @@ fn query_parameters() {
         .unwrap();
     let response = common::client_get(url);
 
-    let body = response.body().concat2().wait().unwrap();
+    let body = response.into_body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
 
     assert_eq!(

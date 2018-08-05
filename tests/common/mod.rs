@@ -1,7 +1,7 @@
 extern crate futures;
 extern crate hyper;
 
-use hyper::{Client, Method, Uri};
+use hyper::{Client, Method, Server, Uri};
 use hyper::{Body, Request, Response};
 use hyper::service::Service;
 use std::sync::mpsc;
@@ -11,32 +11,20 @@ use futures::Future;
 use tokio_core::reactor::Core;
 use std::str;
 use hyper::server::conn::Http;
+use hyper::service::service_fn_ok;
+use hyper::rt;
 
-struct DummyServer {
-    response_function: fn(Response<Body>) -> Response<Body>,
-}
-
-// A dummy upstream HTTP server for testing that returns the received HTTP
-// request in the response body.
-impl Service for DummyServer {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = hyper::Error;
-    type Future = futures::future::FutureResult<Self::Response, Self::Error>;
-
-    fn call(&self, request: Request) -> Self::Future {
-        let mut response = Response::new();
-
-        response.set_body(format!("{:?}", request));
-
-        futures::future::ok((self.response_function)(response))
-    }
+// Return the received request in the response body for testing purposes.
+pub fn echo_request(request: Request<Body>) -> Response<Body> {
+    Response::builder()
+            .body(Body::from(format!("{:?}", request)))
+            .unwrap()
 }
 
 // Starts a dummy server in a separate thread.
 pub fn start_dummy_server(
     port: u16,
-    response_function: fn(Response) -> Response,
+    response_function: fn(Request<Body>) -> Response<Body>,
 ) -> thread::JoinHandle<()> {
     // We need to block until the server has bound successfully to the port, so
     // we block on this channel before we return. As soon as the thread sends
@@ -49,11 +37,18 @@ pub fn start_dummy_server(
             let address = "127.0.0.1:".to_owned() + &port.to_string();
             let addr = address.parse().unwrap();
 
-            let server = Http::new()
-                .bind(&addr, move || Ok(DummyServer { response_function }))
-                .unwrap();
+            let new_svc = move || {
+                service_fn_ok(response_function)
+            };
+
+            let server = Server::bind(&addr)
+                .serve(new_svc)
+                .map_err(|_| ());
+
             addr_tx.send(true).unwrap();
-            server.run().unwrap();
+
+            // Run this server for... forever!
+            hyper::rt::run(server);
         })
         .unwrap();
 
@@ -62,25 +57,26 @@ pub fn start_dummy_server(
     thread
 }
 
-// Since it so complicated to make a client request with a Tokio core we have
+// Since it so complicated to make a client request with a Hyper runtime we have
 // this helper function.
 #[allow(dead_code)]
-pub fn client_get(url: Uri) -> Response {
+pub fn client_get(url: Uri) -> Response<Body> {
     let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
+    let client = Client::new();
 
     let work = client.get(url).and_then(Ok);
     core.run(work).unwrap()
 }
 
 #[allow(dead_code)]
-pub fn client_post(url: Uri, body: &str) -> Response {
+pub fn client_post(url: Uri, body: &'static str) -> Response<Body> {
     let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
+    let client = Client::new();
 
-    let mut req = Request::new(Method::Post, url);
-    let body_data = String::from(body);
-    req.set_body(body_data);
+    let mut req = Request::builder()
+        .method("POST")
+        .body(Body::from(body))
+        .unwrap();
 
     let work = client.request(req).and_then(Ok);
     core.run(work).unwrap()
@@ -89,9 +85,9 @@ pub fn client_post(url: Uri, body: &str) -> Response {
 // Since it so complicated to make a client request with a Tokio core we have
 // this helper function.
 #[allow(dead_code)]
-pub fn client_request(request: Request) -> Response {
+pub fn client_request(request: Request<Body>) -> Response<Body> {
     let mut core = Core::new().unwrap();
-    let client = Client::new(&core.handle());
+    let client = Client::new();
 
     let work = client.request(request).and_then(Ok);
     core.run(work).unwrap()
