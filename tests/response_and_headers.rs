@@ -5,7 +5,7 @@ extern crate tokio_core;
 
 use common::echo_request;
 use futures::{Future, Stream};
-use hyper::header::{HOST, SERVER};
+use hyper::header::{HOST, SERVER, VIA};
 use hyper::StatusCode;
 use hyper::{Body, Request};
 use std::str;
@@ -29,7 +29,7 @@ fn pass_through() {
         .unwrap();
     let response = common::client_get(url);
 
-    assert_eq!(response.headers().get("Via").unwrap(), "1.1 rustnish-0.0.1");
+    assert_eq!(response.headers().get(VIA).unwrap(), "1.1 rustnish-0.0.1");
 
     assert_eq!(response.headers().get(SERVER).unwrap(), "rustnish");
 
@@ -191,7 +191,7 @@ fn via_header_added() {
         let mut response = echo_request(request);
         {
             let headers = response.headers_mut();
-            headers.append("Via", "1.1 test".parse().unwrap());
+            headers.append(VIA, "1.1 test".parse().unwrap());
         }
         response
     });
@@ -202,7 +202,7 @@ fn via_header_added() {
         .unwrap();
     let response = common::client_get(url);
 
-    let mut via_headers = response.headers().get_all("via").iter();
+    let mut via_headers = response.headers().get_all(VIA).iter();
     assert_eq!(&"1.1 test", via_headers.next().unwrap());
     assert_eq!(&"1.1 rustnish-0.0.1", via_headers.next().unwrap());
 }

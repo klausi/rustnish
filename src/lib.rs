@@ -12,7 +12,7 @@ use futures::{Future, Stream};
 use hyper::client::HttpConnector;
 use hyper::client::ResponseFuture;
 use hyper::header::HeaderName;
-use hyper::header::SERVER;
+use hyper::header::{SERVER, VIA};
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Client;
@@ -106,10 +106,7 @@ impl Service for Proxy {
                     {
                         let mut headers = response.headers_mut();
 
-                        headers.append(
-                            HeaderName::from_static("via"),
-                            format!("{} rustnish-0.0.1", version).parse().unwrap(),
-                        );
+                        headers.append(VIA, format!("{} rustnish-0.0.1", version).parse().unwrap());
 
                         // Append a "Server" header if not already present.
                         if !headers.contains_key(SERVER) {
