@@ -1,18 +1,15 @@
 extern crate futures;
 extern crate hyper;
 
-use hyper::{Client, Method, Server, Uri};
+use hyper::{Client, Server, Uri};
 use hyper::{Body, Request, Response};
-use hyper::service::Service;
 use std::sync::mpsc;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 use std::thread;
 use futures::Future;
 use tokio_core::reactor::Core;
 use std::str;
-use hyper::server::conn::Http;
 use hyper::service::service_fn_ok;
-use hyper::rt;
 
 // Return the received request in the response body for testing purposes.
 pub fn echo_request(request: Request<Body>) -> Response<Body> {
@@ -73,8 +70,9 @@ pub fn client_post(url: Uri, body: &'static str) -> Response<Body> {
     let mut core = Core::new().unwrap();
     let client = Client::new();
 
-    let mut req = Request::builder()
+    let req = Request::builder()
         .method("POST")
+        .uri(url)
         .body(Body::from(body))
         .unwrap();
 

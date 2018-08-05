@@ -3,7 +3,7 @@ extern crate hyper;
 extern crate rustnish;
 extern crate tokio_core;
 
-use hyper::{Method, StatusCode};
+use hyper::{StatusCode};
 use hyper::{Body, Request};
 use futures::{Future, Stream};
 use std::str;
@@ -47,14 +47,14 @@ fn pass_through() {
 
     // Check that the request method was GET.
     assert_eq!(
-        "Request { method: Get, uri: \"/\", version: Http11, remote_addr:",
+        "Request { method: GET, uri: /, version: HTTP/1.1, headers: {\"h",
         &result[..62]
     );
 
     // Check that an X-Forwarded-For header was added on the request.
-    assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
+    assert!(result.contains("\"x-forwarded-for\": \"127.0.0.1\""));
 
-    assert!(result.contains(&format!("\"X-Forwarded-Port\": \"{}\"", port),));
+    assert!(result.contains(&format!("\"x-forwarded-port\": \"{}\"", port),));
 }
 
 // Tests that if the proxy cannot connect to upstream it returns a 502 response.
@@ -149,14 +149,14 @@ fn post_request() {
     let result = str::from_utf8(&body).unwrap();
 
     assert_eq!(
-        "Request { method: Post, uri: \"/\", version: Http11, remote_addr:",
+        "Request { method: POST, uri: /, version: HTTP/1.1, headers: {\"h",
         &result[..63]
     );
 
     // Check that an X-Forwarded-For header was added on the request.
-    assert!(result.contains("\"X-Forwarded-For\": \"127.0.0.1\""));
+    assert!(result.contains("\"x-forwarded-for\": \"127.0.0.1\""));
 
-    assert!(result.contains(&format!("\"X-Forwarded-Port\": \"{}\"", port),));
+    assert!(result.contains(&format!("\"x-forwarded-port\": \"{}\"", port),));
 }
 
 // Tests that if an X-Forwarded-For header already exists on the request then
@@ -182,12 +182,13 @@ fn x_forwarded_for_added() {
 
     // Check that the request method was GET.
     assert_eq!(
-        "Request { method: Get, uri: \"/\", version: Http11, remote_addr:",
+        "Request { method: GET, uri: /, version: HTTP/1.1, headers: {\"x",
         &result[..62]
     );
 
     // Check that an X-Forwarded-For header was added on the request.
-    assert!(result.contains("\"X-Forwarded-For\": \"1.2.3.4, 127.0.0.1\"",));
+    assert!(result.contains("\"x-forwarded-for\": \"1.2.3.4\"",));
+    assert!(result.contains("\"x-forwarded-for\": \"127.0.0.1\"",));
 }
 
 // Tests that if a Via header already exists on the request then the proxy adds
@@ -212,8 +213,9 @@ fn via_header_added() {
         .unwrap();
     let response = common::client_get(url);
 
-    let via_headers = response.headers().get("Via").unwrap();
-    assert_eq!(via_headers, "1.1 test, 1.1 rustnish-0.0.1");
+    let mut via_headers = response.headers().get_all("via").iter();
+    assert_eq!(&"1.1 test", via_headers.next().unwrap());
+    assert_eq!(&"1.1 rustnish-0.0.1", via_headers.next().unwrap());
 }
 
 // Tests that if a Server HTTP header is present from upstream it is not
@@ -264,7 +266,7 @@ fn query_parameters() {
     let result = str::from_utf8(&body).unwrap();
 
     assert_eq!(
-        "Request { method: Get, uri: \"/test?key=value\", version: Http11, remote_addr:",
+        "Request { method: GET, uri: /test?key=value, version: HTTP/1.1, headers: {\"h",
         &result[..76]
     );
 }
