@@ -3,12 +3,12 @@ extern crate hyper;
 extern crate rustnish;
 extern crate tokio_core;
 
-use hyper::{StatusCode};
-use hyper::{Body, Request};
-use futures::{Future, Stream};
-use std::str;
-use hyper::header::{HOST, SERVER};
 use common::echo_request;
+use futures::{Future, Stream};
+use hyper::header::{HOST, SERVER};
+use hyper::StatusCode;
+use hyper::{Body, Request};
+use std::str;
 
 mod common;
 
@@ -29,18 +29,9 @@ fn pass_through() {
         .unwrap();
     let response = common::client_get(url);
 
-    assert_eq!(
-        response.headers().get("Via").unwrap(),
-        "1.1 rustnish-0.0.1"
-    );
+    assert_eq!(response.headers().get("Via").unwrap(), "1.1 rustnish-0.0.1");
 
-    assert_eq!(
-        response
-            .headers()
-            .get(SERVER)
-            .unwrap(),
-        "rustnish"
-    );
+    assert_eq!(response.headers().get(SERVER).unwrap(), "rustnish");
 
     let body = response.into_body().concat2().wait().unwrap();
     let result = str::from_utf8(&body).unwrap();
@@ -88,9 +79,7 @@ fn invalid_host() {
 
     let url = "http://127.0.0.1:".to_string() + &port.to_string();
     let mut request = Request::builder();
-    request
-        .uri(url)
-        .header(HOST, "$$$");
+    request.uri(url).header(HOST, "$$$");
 
     let response = common::client_request(request.body(Body::empty()).unwrap());
 
@@ -201,8 +190,8 @@ fn via_header_added() {
     let _dummy_server = common::start_dummy_server(upstream_port, |request| {
         let mut response = echo_request(request);
         {
-        let headers = response.headers_mut();
-        headers.append("Via", "1.1 test".parse().unwrap());
+            let headers = response.headers_mut();
+            headers.append("Via", "1.1 test".parse().unwrap());
         }
         response
     });
@@ -228,7 +217,9 @@ fn server_header_present() {
     let _dummy_server = common::start_dummy_server(upstream_port, |request| {
         let mut response = echo_request(request);
         {
-        response.headers_mut().insert(SERVER, "dummy-server".parse().unwrap());
+            response
+                .headers_mut()
+                .insert(SERVER, "dummy-server".parse().unwrap());
         }
         response
     });
@@ -239,10 +230,7 @@ fn server_header_present() {
         .unwrap();
     let response = common::client_get(url);
 
-    let server_header = response
-        .headers()
-        .get(SERVER)
-        .unwrap();
+    let server_header = response.headers().get(SERVER).unwrap();
     assert_eq!(server_header, "dummy-server");
 }
 

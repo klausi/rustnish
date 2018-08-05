@@ -24,10 +24,10 @@ extern crate rustnish;
 extern crate test;
 extern crate tokio_core;
 
-use futures::{future, Future, Stream};
 use futures::future::{join_all, loop_fn, Loop};
-use tokio_core::reactor::{Core, Handle};
+use futures::{future, Future, Stream};
 use tokio_core::net::TcpListener;
+use tokio_core::reactor::{Core, Handle};
 
 use hyper::header::{ContentLength, ContentType};
 use hyper::server::{self, Service};
@@ -183,7 +183,6 @@ fn spawn_hello(handle: &Handle) {
                         .map_err(|_| ()),
                 );
                 Ok(())
-            })
-            .then(|_| Ok(())),
+            }).then(|_| Ok(())),
     );
 }

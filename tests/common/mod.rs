@@ -1,21 +1,21 @@
 extern crate futures;
 extern crate hyper;
 
-use hyper::{Client, Server, Uri};
-use hyper::{Body, Request, Response};
-use std::sync::mpsc;
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-use std::thread;
 use futures::Future;
-use tokio_core::reactor::Core;
-use std::str;
 use hyper::service::service_fn_ok;
+use hyper::{Body, Request, Response};
+use hyper::{Client, Server, Uri};
+use std::str;
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::mpsc;
+use std::thread;
+use tokio_core::reactor::Core;
 
 // Return the received request in the response body for testing purposes.
 pub fn echo_request(request: Request<Body>) -> Response<Body> {
     Response::builder()
-            .body(Body::from(format!("{:?}", request)))
-            .unwrap()
+        .body(Body::from(format!("{:?}", request)))
+        .unwrap()
 }
 
 // Starts a dummy server in a separate thread.
@@ -34,20 +34,15 @@ pub fn start_dummy_server(
             let address = "127.0.0.1:".to_owned() + &port.to_string();
             let addr = address.parse().unwrap();
 
-            let new_svc = move || {
-                service_fn_ok(response_function)
-            };
+            let new_svc = move || service_fn_ok(response_function);
 
-            let server = Server::bind(&addr)
-                .serve(new_svc)
-                .map_err(|_| ());
+            let server = Server::bind(&addr).serve(new_svc).map_err(|_| ());
 
             addr_tx.send(true).unwrap();
 
             // Run this server for... forever!
             hyper::rt::run(server);
-        })
-        .unwrap();
+        }).unwrap();
 
     let _bind_ready = addr_rx.recv().unwrap();
 

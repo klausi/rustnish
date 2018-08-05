@@ -5,24 +5,24 @@ extern crate hyper;
 extern crate num_cpus;
 extern crate tokio_core;
 
-use hyper::Client;
-use hyper::{Body, Request, Response};
-use tokio_core::reactor::Core;
-use futures::{Future, Stream};
-use futures::future::{Either, FutureResult};
-use hyper::client::HttpConnector;
-use hyper::StatusCode;
-use std::net::SocketAddr;
-use std::thread;
-use errors::*;
 use errors::ResultExt;
-use tokio_core::net::TcpListener;
-use hyper::Version;
-use hyper::header::SERVER;
-use hyper::service::Service;
-use hyper::server::conn::Http;
+use errors::*;
+use futures::future::{Either, FutureResult};
+use futures::{Future, Stream};
+use hyper::client::HttpConnector;
 use hyper::client::ResponseFuture;
 use hyper::header::HeaderName;
+use hyper::header::SERVER;
+use hyper::server::conn::Http;
+use hyper::service::Service;
+use hyper::Client;
+use hyper::StatusCode;
+use hyper::Version;
+use hyper::{Body, Request, Response};
+use std::net::SocketAddr;
+use std::thread;
+use tokio_core::net::TcpListener;
+use tokio_core::reactor::Core;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -41,7 +41,8 @@ type DirectResponse = FutureResult<Response<Body>, hyper::Error>;
 type UpstreamResponse = futures::Then<
     ResponseFuture,
     FutureResult<Response<Body>, hyper::Error>,
-    fn(std::result::Result<Response<Body>, hyper::Error>) -> FutureResult<Response<Body>, hyper::Error>,
+    fn(std::result::Result<Response<Body>, hyper::Error>)
+        -> FutureResult<Response<Body>, hyper::Error>,
 >;
 
 impl Service for Proxy {
@@ -83,8 +84,14 @@ impl Service for Proxy {
 
         {
             let headers = request.headers_mut();
-            headers.append(HeaderName::from_static("x-forwarded-for"), self.source_address.ip().to_string().parse().unwrap());
-            headers.append(HeaderName::from_static("x-forwarded-port"), self.port.to_string().parse().unwrap());
+            headers.append(
+                HeaderName::from_static("x-forwarded-for"),
+                self.source_address.ip().to_string().parse().unwrap(),
+            );
+            headers.append(
+                HeaderName::from_static("x-forwarded-port"),
+                self.port.to_string().parse().unwrap(),
+            );
         }
 
         Either::B(self.client.request(request).then(|result| {
@@ -99,7 +106,10 @@ impl Service for Proxy {
                     {
                         let mut headers = response.headers_mut();
 
-                        headers.append(HeaderName::from_static("via"), format!("{} rustnish-0.0.1", version).parse().unwrap());
+                        headers.append(
+                            HeaderName::from_static("via"),
+                            format!("{} rustnish-0.0.1", version).parse().unwrap(),
+                        );
 
                         // Append a "Server" header if not already present.
                         if !headers.contains_key(SERVER) {
@@ -113,9 +123,9 @@ impl Service for Proxy {
                     // For security reasons do not show the exact error to end users.
                     // @todo Log the error.
                     Response::builder()
-                            .status(StatusCode::BAD_GATEWAY)
-                            .body("Something went wrong, please try again later.".into())
-                            .unwrap()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body("Something went wrong, please try again later.".into())
+                        .unwrap()
                 }
             };
             futures::future::ok(our_response)
@@ -124,8 +134,8 @@ impl Service for Proxy {
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let thread =
-        start_server_background(port, upstream_port).chain_err(|| "Spawning server thread failed")?;
+    let thread = start_server_background(port, upstream_port)
+        .chain_err(|| "Spawning server thread failed")?;
     match thread.join() {
         Ok(thread_result) => match thread_result {
             Ok(_) => bail!("The server thread finished unexpectedly"),
