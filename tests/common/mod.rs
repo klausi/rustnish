@@ -1,14 +1,14 @@
 extern crate futures;
 extern crate hyper;
 
-use hyper::{Client, Method, Uri};
-use hyper::server::{Http, Request, Response, Service};
-use std::sync::mpsc;
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-use std::thread;
 use futures::Future;
-use tokio_core::reactor::Core;
+use hyper::server::{Http, Request, Response, Service};
+use hyper::{Client, Method, Uri};
 use std::str;
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::mpsc;
+use std::thread;
+use tokio_core::reactor::Core;
 
 struct DummyServer {
     response_function: fn(Response) -> Response,
@@ -52,8 +52,7 @@ pub fn start_dummy_server(
                 .unwrap();
             addr_tx.send(true).unwrap();
             server.run().unwrap();
-        })
-        .unwrap();
+        }).unwrap();
 
     let _bind_ready = addr_rx.recv().unwrap();
 

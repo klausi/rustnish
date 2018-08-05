@@ -8,8 +8,8 @@ fn main() {
     let upstream_port: u16 = 80;
 
     if let Err(ref e) = rustnish::start_server_blocking(port, upstream_port) {
-        use std::io::Write;
-        use error_chain::ChainedError; // trait which holds `display`
+        use error_chain::ChainedError;
+        use std::io::Write; // trait which holds `display`
         let stderr = &mut ::std::io::stderr();
         let errmsg = "Error writing to stderr";
 

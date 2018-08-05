@@ -3,10 +3,10 @@ extern crate hyper;
 extern crate rustnish;
 extern crate tokio_core;
 
-use hyper::{Method, StatusCode};
+use futures::{Future, Stream};
 use hyper::header::Host;
 use hyper::server::Request;
-use futures::{Future, Stream};
+use hyper::{Method, StatusCode};
 use std::str;
 
 mod common;

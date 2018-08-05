@@ -5,20 +5,20 @@ extern crate hyper;
 extern crate num_cpus;
 extern crate tokio_core;
 
-use hyper::Client;
-use hyper::server::{Http, Request, Response, Service};
-use tokio_core::reactor::Core;
-use futures::{Future, Stream};
+use errors::ResultExt;
+use errors::*;
 use futures::future::{Either, FutureResult};
-use hyper::client::HttpConnector;
+use futures::{Future, Stream};
 use hyper::client::FutureResponse;
+use hyper::client::HttpConnector;
+use hyper::server::{Http, Request, Response, Service};
+use hyper::Client;
+use hyper::HttpVersion;
 use hyper::StatusCode;
 use std::net::SocketAddr;
 use std::thread;
-use errors::*;
-use errors::ResultExt;
-use hyper::HttpVersion;
 use tokio_core::net::TcpListener;
+use tokio_core::reactor::Core;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -124,8 +124,8 @@ impl Service for Proxy {
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let thread =
-        start_server_background(port, upstream_port).chain_err(|| "Spawning server thread failed")?;
+    let thread = start_server_background(port, upstream_port)
+        .chain_err(|| "Spawning server thread failed")?;
     match thread.join() {
         Ok(thread_result) => match thread_result {
             Ok(_) => bail!("The server thread finished unexpectedly"),
