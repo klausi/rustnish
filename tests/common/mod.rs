@@ -40,7 +40,6 @@ pub fn start_dummy_server(
 
             addr_tx.send(true).unwrap();
 
-            // Run this server for... forever!
             hyper::rt::run(server);
         }).unwrap();
 
