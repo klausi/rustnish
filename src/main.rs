@@ -11,9 +11,8 @@ fn main() {
         use error_chain::ChainedError;
         use std::io::Write; // trait which holds `display`
         let stderr = &mut ::std::io::stderr();
-        let errmsg = "Error writing to stderr";
 
-        writeln!(stderr, "{}", e.display_chain()).expect(errmsg);
+        writeln!(stderr, "{}", e.display_chain()).expect("Error writing to stderr");
         ::std::process::exit(1);
     };
 }
