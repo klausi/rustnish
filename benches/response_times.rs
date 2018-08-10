@@ -130,8 +130,7 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
                             proxy_port
                         );
                         // Read response body until the end.
-                        let _body = res.into_body();
-                        Ok(())
+                        res.into_body().for_each(|_chunk| Ok(()))
                     })
                     .and_then(move |_| -> Result<_, hyper::Error> {
                         if counter < (amount / concurrency) {
