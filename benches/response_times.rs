@@ -29,8 +29,11 @@ use futures::{future, Future, Stream};
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Handle};
 
-use hyper::header::{ContentLength, ContentType};
-use hyper::server::{self, Service};
+use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE};
+use hyper::server::conn::Http;
+use hyper::service::Service;
+use hyper::StatusCode;
+use hyper::{Body, Request, Response};
 
 #[bench]
 fn a_1_request(b: &mut test::Bencher) {
@@ -107,7 +110,7 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
     let handle = core.handle();
     spawn_hello(&handle);
 
-    let client = hyper::Client::new(&handle);
+    let client = hyper::Client::new();
 
     let url: hyper::Uri = format!("http://127.0.0.1:{}/get", proxy_port)
         .parse()
@@ -122,12 +125,13 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
                     .and_then(|res| {
                         assert_eq!(
                             res.status(),
-                            hyper::StatusCode::Ok,
+                            StatusCode::OK,
                             "Varnish did not return a 200 HTTP status code. Make sure Varnish is configured on port {} and the backend port is set to 9091 in /etc/varnish/default.vcl",
                             proxy_port
                         );
                         // Read response body until the end.
-                        res.body().for_each(|_chunk| Ok(()))
+                        let _body = res.into_body();
+                        Ok(())
                     })
                     .and_then(move |_| -> Result<_, hyper::Error> {
                         if counter < (amount / concurrency) {
@@ -151,16 +155,17 @@ static PHRASE: &'static [u8] = b"Hello, World!";
 struct Hello;
 
 impl Service for Hello {
-    type Request = server::Request;
-    type Response = server::Response;
+    type ReqBody = Body;
+    type ResBody = Body;
     type Error = hyper::Error;
-    type Future = future::FutureResult<Self::Response, hyper::Error>;
-    fn call(&self, _req: Self::Request) -> Self::Future {
+    type Future = future::FutureResult<Response<Body>, hyper::Error>;
+    fn call(&mut self, _req: Request<Body>) -> Self::Future {
         future::ok(
-            server::Response::new()
-                .with_header(ContentLength(PHRASE.len() as u64))
-                .with_header(ContentType::plaintext())
-                .with_body(PHRASE),
+            Response::builder()
+                .header(CONTENT_TYPE, "text/plain")
+                .header(CONTENT_LENGTH, PHRASE.len())
+                .body(PHRASE.into())
+                .unwrap(),
         )
     }
 }
@@ -172,7 +177,7 @@ fn spawn_hello(handle: &Handle) {
     let listener = TcpListener::bind(&addr, handle).unwrap();
 
     let handle2 = handle.clone();
-    let http = hyper::server::Http::<hyper::Chunk>::new();
+    let http = Http::new();
     handle.spawn(
         listener
             .incoming()
