@@ -26,16 +26,14 @@ extern crate tokio;
 extern crate tokio_core;
 
 use futures::future::{join_all, loop_fn, Loop};
-use futures::{future, Future, Stream};
+use futures::{Future, Stream};
+use hyper::service::service_fn_ok;
+use hyper::Server;
 use tokio::runtime::Runtime;
-use tokio_core::net::TcpListener;
-use tokio_core::reactor::{Core, Handle};
+use tokio_core::reactor::Core;
 
-use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE};
-use hyper::server::conn::Http;
-use hyper::service::Service;
 use hyper::StatusCode;
-use hyper::{Body, Request, Response};
+use hyper::{Body, Response};
 
 #[bench]
 fn a_1_request(b: &mut test::Bencher) {
@@ -123,9 +121,8 @@ fn bench_requests(
     runtime: Runtime,
 ) {
     let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    spawn_hello(&handle);
-    //std::thread::sleep_ms(60000);
+    let mut rt = Runtime::new().unwrap();
+    spawn_hello(&mut rt);
 
     let client = hyper::Client::new();
 
@@ -166,45 +163,16 @@ fn bench_requests(
     drop(runtime);
 }
 
-static PHRASE: &'static [u8] = b"Hello, World!";
+static TEXT: &str = "Hello, World!";
 
-#[derive(Clone, Copy)]
-struct Hello;
+fn spawn_hello(rt: &mut Runtime) {
+    let addr = ([127, 0, 0, 1], 9091).into();
 
-impl Service for Hello {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = hyper::Error;
-    type Future = future::FutureResult<Response<Body>, hyper::Error>;
-    fn call(&mut self, _req: Request<Body>) -> Self::Future {
-        future::ok(
-            Response::builder()
-                .header(CONTENT_TYPE, "text/plain")
-                .header(CONTENT_LENGTH, PHRASE.len())
-                .body(PHRASE.into())
-                .unwrap(),
-        )
-    }
-}
+    let new_svc = || service_fn_ok(|_req| Response::new(Body::from(TEXT)));
 
-// Start a simple hello server on port 9091. This will be our upstream backend
-// for testing.
-fn spawn_hello(handle: &Handle) {
-    let addr = "127.0.0.1:9091".parse().unwrap();
-    let listener = TcpListener::bind(&addr, handle).unwrap();
+    let server = Server::bind(&addr)
+        .serve(new_svc)
+        .map_err(|e| eprintln!("server error: {}", e));
 
-    let handle2 = handle.clone();
-    let http = Http::new();
-    handle.spawn(
-        listener
-            .incoming()
-            .for_each(move |(socket, _addr)| {
-                handle2.spawn(
-                    http.serve_connection(socket, Hello)
-                        .map(|_| ())
-                        .map_err(|_| ()),
-                );
-                Ok(())
-            }).then(|_| Ok(())),
-    );
+    rt.spawn(server);
 }
