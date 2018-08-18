@@ -3,7 +3,7 @@ extern crate error_chain;
 extern crate futures;
 extern crate hyper;
 extern crate num_cpus;
-extern crate tokio_core;
+extern crate tokio;
 
 use errors::ResultExt;
 use errors::*;
@@ -20,9 +20,8 @@ use hyper::StatusCode;
 use hyper::Version;
 use hyper::{Body, Request, Response};
 use std::net::SocketAddr;
-use std::thread;
-use tokio_core::net::TcpListener;
-use tokio_core::reactor::Core;
+use tokio::net::TcpListener;
+use tokio::runtime::Runtime;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
@@ -131,77 +130,50 @@ impl Service for Proxy {
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let thread = start_server_background(port, upstream_port)
+    let runtime = start_server_background(port, upstream_port)
         .chain_err(|| "Spawning server thread failed")?;
-    match thread.join() {
-        Ok(thread_result) => match thread_result {
-            Ok(_) => bail!("The server thread finished unexpectedly"),
-            Err(error) => Err(Error::with_chain(
-                error,
-                "The server thread stopped with an error",
-            )),
-        },
-        // I would love to pass up the error here, but it is a Box and I don't
-        // know how to do that.
-        Err(_) => bail!("The server thread panicked"),
-    }
+
+    runtime.shutdown_on_idle().wait().unwrap();
+
+    bail!("The server thread finished unexpectedly");
 }
 
-pub fn start_server_background(
-    port: u16,
-    upstream_port: u16,
-) -> Result<thread::JoinHandle<Result<()>>> {
-    // We need to block until the server has bound successfully to the port, so
-    // we block on this channel before we return. As soon as the thread sends
-    // out the signal we can return.
-    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime> {
+    let address: SocketAddr = ([127, 0, 0, 1], port).into();
+    let mut runtime = Runtime::new().unwrap();
 
-    let thread = thread::Builder::new()
-        .name("rustnish".to_owned())
-        // Even if our thread returns nothing but errors the Rust convention is
-        // to always do that in the form of a Result type.
-        .spawn(move || -> Result<()> {
-            let address: SocketAddr = ([127, 0, 0, 1], port).into();
-            let mut core = Core::new().unwrap();
-            let handle = core.handle();
+    // We can't use Http::new().bind() because we need to pass down the
+    // remote source IP address to our proxy service. So we need to
+    // create a TCP listener ourselves and handle each connection to
+    // have access to the source IP address.
+    // @todo Simplify this once Hyper has a better API to handle IP
+    // addresses.
+    let listener = TcpListener::bind(&address)
+        .chain_err(|| format!("Failed to bind server to address {}", address))?;
+    let client = Client::new();
+    let http = Http::new();
 
-            // We can't use Http::new().bind() because we need to pass down the
-            // remote source IP address to our proxy service. So we need to
-            // create a TCP listener ourselves and handle each connection to
-            // have access to the source IP address.
-            // @todo Simplify this once Hyper has a better API to handle IP
-            // addresses.
-            let listener = TcpListener::bind(&address, &handle)
-                .chain_err(|| format!("Failed to bind server to address {}", address))?;
-            let client = Client::new();
-            let http = Http::new();
+    let server = listener
+        .incoming()
+        .for_each(move |socket| {
+            let source_address = socket.peer_addr().unwrap();
+            tokio::spawn(
+                http.serve_connection(
+                    socket,
+                    Proxy {
+                        port,
+                        upstream_port,
+                        client: client.clone(),
+                        source_address,
+                    },
+                ).map(|_| ())
+                .map_err(|_| ()),
+            );
+            Ok(())
+        }).map_err(|e| panic!("accept error: {}", e));
 
-            let server = listener.incoming().for_each(move |(socket, source_address)| {
-                handle.spawn(
-                    http.serve_connection(socket, Proxy {
-                            port,
-                            upstream_port,
-                            client: client.clone(),
-                            source_address,
-                        })
-                        .map(|_| ())
-                        .map_err(|_| ())
-                );
-                Ok(())
-            });
+    println!("Listening on http://{}", address);
+    runtime.spawn(server);
 
-            ready_tx.send(true).chain_err(|| "Failed to send back thread ready signal.")?;
-
-            println!("Listening on http://{}", address);
-            core.run(server).chain_err(|| "Tokio core run error")?;
-            bail!("The Tokio core run ended unexpectedly");
-        })
-        .chain_err(|| "Spawning server thread failed")?;
-
-    // Whether our channel to the thread received something or was closed with
-    // an error because the thread errored - we don't care. This call is just
-    // here to block until the server binding in the thread is done.
-    let _bind_ready = ready_rx.recv();
-
-    Ok(thread)
+    Ok(runtime)
 }

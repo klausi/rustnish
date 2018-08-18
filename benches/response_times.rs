@@ -22,10 +22,12 @@ extern crate futures;
 extern crate hyper;
 extern crate rustnish;
 extern crate test;
+extern crate tokio;
 extern crate tokio_core;
 
 use futures::future::{join_all, loop_fn, Loop};
 use futures::{future, Future, Stream};
+use tokio::runtime::Runtime;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Handle};
 
@@ -37,17 +39,18 @@ use hyper::{Body, Request, Response};
 
 #[bench]
 fn a_1_request(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
-    bench_requests(b, 1, 1, 9090);
+    let runtime = rustnish::start_server_background(9090, 9091).unwrap();
+    bench_requests(b, 1, 1, 9090, runtime);
 }
 
 #[bench]
 fn a_1_request_varnish(b: &mut test::Bencher) {
     // Assume Varnish is already running.
-    bench_requests(b, 1, 1, 6081);
+    let runtime = Runtime::new().unwrap();
+    bench_requests(b, 1, 1, 6081, runtime);
 }
 
-#[bench]
+/*#[bench]
 fn b_10_requests(b: &mut test::Bencher) {
     rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 10, 1, 9090);
@@ -105,12 +108,19 @@ fn f_1_000_parallel_requests(b: &mut test::Bencher) {
 fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
     // Assume Varnish is already running.
     bench_requests(b, 1_000, 100, 6081);
-}
+}*/
 
-fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_port: u16) {
+fn bench_requests(
+    b: &mut test::Bencher,
+    amount: u32,
+    concurrency: u32,
+    proxy_port: u16,
+    runtime: Runtime,
+) {
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     spawn_hello(&handle);
+    //std::thread::sleep_ms(60000);
 
     let client = hyper::Client::new();
 
@@ -148,6 +158,7 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
         let work = join_all(parallel);
         core.run(work).unwrap();
     });
+    drop(runtime);
 }
 
 static PHRASE: &'static [u8] = b"Hello, World!";

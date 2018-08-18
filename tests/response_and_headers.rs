@@ -100,10 +100,7 @@ fn port_occupied() {
 
     let _dummy_server = common::start_dummy_server(port, echo_request);
     let error_chain = rustnish::start_server_blocking(port, port).unwrap_err();
-    assert_eq!(
-        error_chain.description(),
-        "The server thread stopped with an error"
-    );
+    assert_eq!(error_chain.description(), "Spawning server thread failed");
     let mut iter = error_chain.iter();
     let _first = iter.next();
     let second = iter.next().unwrap();
