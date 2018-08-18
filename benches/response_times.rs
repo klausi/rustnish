@@ -85,6 +85,7 @@ fn d_10_parallel_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn e_100_parallel_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 100, 10, 9090);
 }
 
@@ -96,6 +97,7 @@ fn e_100_parallel_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn f_1_000_parallel_requests(b: &mut test::Bencher) {
+    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 1_000, 100, 9090);
 }
 
