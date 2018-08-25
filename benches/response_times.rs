@@ -115,8 +115,8 @@ fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
 
 fn bench_requests(
     b: &mut test::Bencher,
-    amount: u32,
-    concurrency: u32,
+    amount: u16,
+    concurrency: u16,
     proxy_port: u16,
     runtime: Runtime,
 ) {
@@ -131,7 +131,7 @@ fn bench_requests(
         .unwrap();
 
     b.iter(move || {
-        let mut parallel = Vec::new();
+        let mut parallel = Vec::with_capacity(concurrency as usize);
         for _i in 0..concurrency {
             let requests_til_done = loop_fn(0, |counter| {
                 client
@@ -160,7 +160,7 @@ fn bench_requests(
         let work = join_all(parallel);
         core.run(work).unwrap();
     });
-    drop(runtime);
+    runtime.shutdown_now().wait().unwrap();
 }
 
 static TEXT: &str = "Hello, World!";
