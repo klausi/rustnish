@@ -2,7 +2,12 @@
 
 // Performs various timing tests on Rustnish and Varnish.
 //
+// To better compare Varnish and Rustnish they must be started both externally
+// so that the benchmark code here only executes HTTP client timing code.
+//
 // The backend service must be started with `cargo run --example hello`.
+//
+// Rustnish must be started with `cargo run --release --example rustnish_9090`.
 //
 // Varnish must be running and configured to listen on port 6081. The backend
 // port must be set to 9091.
@@ -19,11 +24,10 @@
 //    return (pass);
 // }
 // ```
-// Execute with `cargo bench`
+// Execute with `cargo bench`.
 
 extern crate futures;
 extern crate hyper;
-extern crate rustnish;
 extern crate test;
 extern crate tokio_core;
 
@@ -33,7 +37,6 @@ use tokio_core::reactor::Core;
 
 #[bench]
 fn a_1_request(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 1, 1, 9090);
 }
 
@@ -45,7 +48,6 @@ fn a_1_request_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn b_10_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 10, 1, 9090);
 }
 
@@ -57,7 +59,6 @@ fn b_10_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn c_100_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 100, 1, 9090);
 }
 
@@ -69,7 +70,6 @@ fn c_100_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn d_10_parallel_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 10, 10, 9090);
 }
 
@@ -81,7 +81,6 @@ fn d_10_parallel_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn e_100_parallel_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 100, 10, 9090);
 }
 
@@ -93,7 +92,6 @@ fn e_100_parallel_requests_varnish(b: &mut test::Bencher) {
 
 #[bench]
 fn f_1_000_parallel_requests(b: &mut test::Bencher) {
-    rustnish::start_server_background(9090, 9091).unwrap();
     bench_requests(b, 1_000, 100, 9090);
 }
 
@@ -123,7 +121,7 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
                         assert_eq!(
                             res.status(),
                             hyper::StatusCode::Ok,
-                            "Varnish did not return a 200 HTTP status code. Make sure Varnish is configured on port {} and the backend port is set to 9091 in /etc/varnish/default.vcl. Make sure the backend server is running with cargo run --example hello.",
+                            "Did not receive a 200 HTTP status code. Make sure Varnish is configured on port {} and the backend port is set to 9091 in /etc/varnish/default.vcl. Make sure the backend server is running with `cargo run --example hello_9091` and Rustnish with `cargo run --release --example rustnish_9090`.",
                             proxy_port
                         );
                         // Read response body until the end.
