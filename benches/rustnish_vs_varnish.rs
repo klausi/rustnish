@@ -1,7 +1,14 @@
 #![feature(test)]
 
 // Performs various timing tests on Rustnish and Varnish.
-// Execute with `cargo bench`
+//
+// To better compare Varnish and Rustnish they must be started both externally
+// so that the benchmark code here only executes HTTP client timing code.
+//
+// The backend service must be started with `cargo run --example hello`.
+//
+// Rustnish must be started with `cargo run --release --example rustnish_9090`.
+//
 // Varnish must be running and configured to listen on port 6081. The backend
 // port must be set to 9091.
 // Example Varnish configuration in /etc/varnish/default.vcl:
@@ -17,6 +24,7 @@
 //    return (pass);
 // }
 // ```
+// Execute with `cargo bench`.
 
 extern crate futures;
 extern crate hyper;
@@ -36,6 +44,7 @@ fn a_1_request(b: &mut test::Bencher) {
 
 #[bench]
 fn a_1_request_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
     bench_requests(b, 1, 1, 6081);
 }
 
@@ -46,6 +55,7 @@ fn b_10_requests(b: &mut test::Bencher) {
 
 #[bench]
 fn b_10_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
     bench_requests(b, 10, 1, 6081);
 }
 
@@ -56,6 +66,7 @@ fn c_100_requests(b: &mut test::Bencher) {
 
 #[bench]
 fn c_100_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
     bench_requests(b, 100, 1, 6081);
 }
 
@@ -66,6 +77,7 @@ fn d_10_parallel_requests(b: &mut test::Bencher) {
 
 #[bench]
 fn d_10_parallel_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
     bench_requests(b, 10, 10, 6081);
 }
 
@@ -76,6 +88,7 @@ fn e_100_parallel_requests(b: &mut test::Bencher) {
 
 #[bench]
 fn e_100_parallel_requests_varnish(b: &mut test::Bencher) {
+    // Assume Varnish is already running.
     bench_requests(b, 100, 10, 6081);
 }
 
