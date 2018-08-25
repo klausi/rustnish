@@ -160,6 +160,7 @@ fn bench_requests(
         let work = join_all(parallel);
         core.run(work).unwrap();
     });
+    rt.shutdown_now().wait().unwrap();
     runtime.shutdown_now().wait().unwrap();
 }
 
