@@ -5,7 +5,7 @@
 // To better compare Varnish and Rustnish they must be started both externally
 // so that the benchmark code here only executes HTTP client timing code.
 //
-// The backend service must be started with `cargo run --example hello`.
+// The backend service must be started with `cargo run --example hello_9091`.
 //
 // Rustnish must be started with `cargo run --release --example rustnish_9090`.
 //
