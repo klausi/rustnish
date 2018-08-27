@@ -5,7 +5,7 @@
 // To better compare Varnish and Rustnish they must be started both externally
 // so that the benchmark code here only executes HTTP client timing code.
 //
-// The backend service must be started with `cargo run --example hello`.
+// The backend service must be started with `cargo run --example hello_9091`.
 //
 // Rustnish must be started with `cargo run --release --example rustnish_9090`.
 //
@@ -34,8 +34,8 @@ extern crate tokio_core;
 
 use futures::future::{join_all, loop_fn, Loop};
 use futures::{Future, Stream};
-use tokio_core::reactor::Core;
 use hyper::StatusCode;
+use tokio_core::reactor::Core;
 
 #[bench]
 fn a_1_request(b: &mut test::Bencher) {
@@ -102,12 +102,7 @@ fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
     bench_requests(b, 1_000, 100, 6081);
 }
 
-fn bench_requests(
-    b: &mut test::Bencher,
-    amount: u16,
-    concurrency: u16,
-    proxy_port: u16,
-) {
+fn bench_requests(b: &mut test::Bencher, amount: u16, concurrency: u16, proxy_port: u16) {
     let mut core = Core::new().unwrap();
 
     let client = hyper::Client::new();
