@@ -102,18 +102,25 @@ fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
 }
 
 fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_port: u16) {
+    // Initialize all the Tokio runtime stuff.
     let mut core = Core::new().unwrap();
     let handle = core.handle();
-
     let client = hyper::Client::new(&handle);
 
+    // Target is localhost with the port of the proxy under test.
     let url: hyper::Uri = format!("http://127.0.0.1:{}/get", proxy_port)
         .parse()
         .unwrap();
 
+    // This is the benchmark loop that will be executed multiple times and
+    // measured.
     b.iter(move || {
+        // Build a list of futures that we will execute all at once in parallel
+        // in the end.
         let mut parallel = Vec::new();
         for _i in 0..concurrency {
+            // A future that sends requests sequentially by scheduling itself in
+            // a loop-like way.
             let requests_til_done = loop_fn(0, |counter| {
                 client
                     .get(url.clone())
@@ -121,13 +128,14 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
                         assert_eq!(
                             res.status(),
                             hyper::StatusCode::Ok,
-                            "Did not receive a 200 HTTP status code. Make sure Varnish is configured on port {} and the backend port is set to 9091 in /etc/varnish/default.vcl. Make sure the backend server is running with `cargo run --example hello_9091` and Rustnish with `cargo run --release --example rustnish_9090`.",
-                            proxy_port
-                        );
+                            "Did not receive a 200 HTTP status code. Make sure Varnish is configured on port 6081 and the backend port is set to 9091 in /etc/varnish/default.vcl. Make sure the backend server is running with `cargo run --example hello_9091` and Rustnish with `cargo run --release --example rustnish_9090`.");
                         // Read response body until the end.
                         res.body().for_each(|_chunk| Ok(()))
                     })
-                    .and_then(move |_| -> Result<_, hyper::Error> {
+                    // Break condition of the future "loop". The return values
+                    // signal the loop future if it should run another iteration
+                    // or not.
+                    .and_then(move |_| {
                         if counter < (amount / concurrency) {
                             Ok(Loop::Continue(counter + 1))
                         } else {
@@ -138,7 +146,10 @@ fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_po
             parallel.push(requests_til_done);
         }
 
+        // The execution should finish when all futures are done.
         let work = join_all(parallel);
+        // Now run it! Up to this point no request has been sent, we just
+        // assembled heavily nested futures so far.
         core.run(work).unwrap();
     });
 }
