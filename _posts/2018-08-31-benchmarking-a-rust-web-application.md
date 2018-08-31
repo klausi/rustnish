@@ -104,7 +104,7 @@ The book has some good points of advice, one point that we are going to delibera
 
 > Make the code in the iter loop do something simple, to assist in pinpointing performance improvements (or regressions)
 
-But we want to do a full black box performance test of our service here, so our benchmark will be an HTTP client that sends requests and measures response times. This is not a trivial thing to do with Hyper because there are no examples guides of how to send requests in parallel. Here is a helper function I came up with:
+But we want to do a full black box performance test of our service here, so our benchmark will be an HTTP client that sends requests and measures response times. This is not a trivial thing to do with Hyper because there are no example guides of how to send requests in parallel. Here is a helper function I came up with:
 
 ```rust
 fn bench_requests(b: &mut test::Bencher, amount: u32, concurrency: u32, proxy_port: u16) {
@@ -203,3 +203,38 @@ test f_1_000_parallel_requests_varnish ... bench:  86,922,588 ns/iter (+/- 1,687
 ```
 
 Cool, that shows our proxy always being slightly faster than Varnish.
+
+
+## Observing benchmark regressions
+
+Now that we have established a performance base line we can change or refactor our code and check what happens to our benchmark numbers. My Rustnish project is built on the Hyper library version 0.11, let's see what happens if I update and rewrite to Hyper 0.12 (code in the [hyper-0.12-upgrade branch](https://github.com/klausi/rustnish/tree/hyper-0.12-upgrade)) and run the same benchmark:
+
+```
+test a_1_request                       ... bench:     554,467 ns/iter (+/- 75,441)
+test a_1_request_varnish               ... bench:     495,228 ns/iter (+/- 94,544)
+test b_10_requests                     ... bench:   3,022,574 ns/iter (+/- 1,797,736)
+test b_10_requests_varnish             ... bench:   2,755,437 ns/iter (+/- 500,961)
+test c_100_requests                    ... bench:  27,405,520 ns/iter (+/- 2,611,418)
+test c_100_requests_varnish            ... bench:  24,964,495 ns/iter (+/- 3,385,641)
+test d_10_parallel_requests            ... bench:   5,712,737 ns/iter (+/- 11,442,635)
+test d_10_parallel_requests_varnish    ... bench:   1,684,061 ns/iter (+/- 264,177)
+test e_100_parallel_requests           ... bench:  25,301,274 ns/iter (+/- 35,737,625)
+test e_100_parallel_requests_varnish   ... bench:   8,721,555 ns/iter (+/- 897,422)
+test f_1_000_parallel_requests         ... bench:  69,946,899 ns/iter (+/- 36,979,491)
+test f_1_000_parallel_requests_varnish ... bench:  76,219,659 ns/iter (+/- 10,381,027)
+```
+
+Ouch, that is quite a heavy performance regression! Some observations:
+
+* Varnish is now faster in almost all scenarios - which probably means that there is a performance regression in our reverse proxy.
+* Serial requests seem to get processed slower now. That could indicate a regression in the Hyper example server or in our Hyper client code.
+* There are huge timing deviations between benchmark iterations when Rustnish is used. Could point to some inefficiency when many requests are handled at the same time.
+
+
+## Conclusion
+
+Automated benchmarks are great when you want to track the performance of your application over time. `cargo bench` is useful, unfortunately it is only available on Rust Nightly. The biggest challenge when doing a big black box performance test is to isolate the cause once you have determined a performance regression. Why and where is it happening? Is it really the application or the benchmark code? Can I reproduce the behavior with manual performance testing?
+
+The Hyper library does not seem to be a good fit for me when writing a reverse proxy. After finding a [memory leak]({{ site.baseurl }}{%
+post_url 2017-10-06-testing-memory-leaks-in-rust %}), a [denial of service weakness]({{ site.baseurl }}{%
+post_url 2018-03-11-crashing-a-rust-hyper-server-with-a-denial-of-service-attack %}) and now this performance regression I think it is time to try another framework next.
