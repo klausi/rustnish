@@ -238,3 +238,7 @@ Automated benchmarks are great when you want to track the performance of your ap
 The Hyper library does not seem to be a good fit for me when writing a reverse proxy. After finding a [memory leak]({{ site.baseurl }}{%
 post_url 2017-10-06-testing-memory-leaks-in-rust %}), a [denial of service weakness]({{ site.baseurl }}{%
 post_url 2018-03-11-crashing-a-rust-hyper-server-with-a-denial-of-service-attack %}) and now this performance regression I think it is time to try another framework next.
+
+**Update 2018-09-07:** seanmonster has some good insights about multi-threading performance in [their Reddit comments](https://www.reddit.com/r/rust/comments/9bukvy/blog_post_benchmarking_a_rustlang_web_application/e56484j). I was able to get Rustnish benchmark numbers ahead of Varnish again, but only by setting Tokio to be single-threaded. So in my single computer (but 4 CPU core) scenario Hyper is only able to compete with Varnish if we eliminate Tokio multithreading. The question remains: Varnish is multithreaded with 2 threadpools and potentially very many threads, why can it handle that so much better than Tokio?
+
+I also [quickly tested actix-web](https://github.com/klausi/rustnish/blob/actix-web-test/src/lib.rs) as a replacement for Hyper, but that delivered even worse benchmark results. I think I'll stick to Hyper for now :-)
