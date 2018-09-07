@@ -2,15 +2,12 @@
 extern crate error_chain;
 extern crate futures;
 extern crate hyper;
-extern crate num_cpus;
 extern crate tokio;
 
 use errors::ResultExt;
 use errors::*;
-use futures::future::{Either, FutureResult};
 use futures::{Future, Stream};
 use hyper::client::HttpConnector;
-use hyper::client::ResponseFuture;
 use hyper::header::HeaderName;
 use hyper::header::{SERVER, VIA};
 use hyper::server::conn::Http;
@@ -36,19 +33,11 @@ struct Proxy {
     source_address: SocketAddr,
 }
 
-type DirectResponse = FutureResult<Response<Body>, hyper::Error>;
-type UpstreamResponse = futures::Then<
-    ResponseFuture,
-    FutureResult<Response<Body>, hyper::Error>,
-    fn(std::result::Result<Response<Body>, hyper::Error>)
-        -> FutureResult<Response<Body>, hyper::Error>,
->;
-
 impl Service for Proxy {
     type ReqBody = Body;
     type ResBody = Body;
     type Error = hyper::Error;
-    type Future = Either<DirectResponse, UpstreamResponse>;
+    type Future = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         let upstream_uri = {
@@ -69,7 +58,7 @@ impl Service for Proxy {
                     // We can't actually test this because parsing the URI never
                     // fails. However, should that change at any point this is the
                     // right thing to do.
-                    return Either::A(futures::future::ok(
+                    return Box::new(futures::future::ok(
                         Response::builder()
                             .status(StatusCode::BAD_REQUEST)
                             .body("Invalid upstream URI".into())
@@ -93,7 +82,7 @@ impl Service for Proxy {
             );
         }
 
-        Either::B(self.client.request(request).then(|result| {
+        Box::new(self.client.request(request).then(|result| {
             let our_response = match result {
                 Ok(mut response) => {
                     let version = match response.version() {
