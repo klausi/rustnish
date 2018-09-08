@@ -103,6 +103,8 @@ fn f_1_000_parallel_requests_varnish(b: &mut test::Bencher) {
 }
 
 fn bench_requests(b: &mut test::Bencher, amount: u16, concurrency: u16, proxy_port: u16) {
+    // @todo I tried to convert this to the new tokio crate, but then the
+    // ownership in the closure does not work anymore.
     let mut core = Core::new().unwrap();
 
     let client = hyper::Client::new();

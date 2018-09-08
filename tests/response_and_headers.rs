@@ -1,7 +1,6 @@
 extern crate futures;
 extern crate hyper;
 extern crate rustnish;
-extern crate tokio_core;
 
 use common::echo_request;
 use futures::{Future, Stream};

@@ -1,6 +1,8 @@
 extern crate futures;
 extern crate hyper;
+extern crate tokio;
 
+use common::tokio::runtime::Runtime;
 use futures::Future;
 use hyper::service::service_fn_ok;
 use hyper::{Body, Request, Response};
@@ -9,7 +11,6 @@ use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
 use std::sync::mpsc;
 use std::thread;
-use tokio_core::reactor::Core;
 
 // Return the received request in the response body for testing purposes.
 pub fn echo_request(request: Request<Body>) -> Response<Body> {
@@ -52,16 +53,15 @@ pub fn start_dummy_server(
 // this helper function.
 #[allow(dead_code)]
 pub fn client_get(url: Uri) -> Response<Body> {
-    let mut core = Core::new().unwrap();
     let client = Client::new();
-
     let work = client.get(url).and_then(Ok);
-    core.run(work).unwrap()
+
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(work).unwrap()
 }
 
 #[allow(dead_code)]
 pub fn client_post(url: Uri, body: &'static str) -> Response<Body> {
-    let mut core = Core::new().unwrap();
     let client = Client::new();
 
     let req = Request::builder()
@@ -71,18 +71,18 @@ pub fn client_post(url: Uri, body: &'static str) -> Response<Body> {
         .unwrap();
 
     let work = client.request(req).and_then(Ok);
-    core.run(work).unwrap()
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(work).unwrap()
 }
 
-// Since it so complicated to make a client request with a Tokio core we have
+// Since it so complicated to make a client request with a Tokio runtime we have
 // this helper function.
 #[allow(dead_code)]
 pub fn client_request(request: Request<Body>) -> Response<Body> {
-    let mut core = Core::new().unwrap();
     let client = Client::new();
-
     let work = client.request(request).and_then(Ok);
-    core.run(work).unwrap()
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(work).unwrap()
 }
 
 // Returns a local port number that has not been used yet in parallel test
