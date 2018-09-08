@@ -2,6 +2,7 @@
 extern crate error_chain;
 extern crate futures;
 extern crate hyper;
+extern crate lru_time_cache;
 extern crate tokio;
 
 use errors::ResultExt;
@@ -16,7 +17,9 @@ use hyper::Client;
 use hyper::StatusCode;
 use hyper::Version;
 use hyper::{Body, Request, Response};
+use lru_time_cache::LruCache;
 use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 
@@ -31,6 +34,7 @@ struct Proxy {
     client: Client<HttpConnector>,
     // The socket address the original request is coming from.
     source_address: SocketAddr,
+    cache: Arc<RwLock<LruCache<String, Response<Body>>>>,
 }
 
 impl Service for Proxy {
@@ -40,6 +44,10 @@ impl Service for Proxy {
     type Future = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
+        if let Some(response) = self.cache_lookup(&request) {
+            return Box::new(futures::future::ok(response));
+        }
+
         let upstream_uri = {
             // 127.0.0.1 is hard coded here for now because we assume that upstream
             // is on the same host. Should be made configurable later.
@@ -118,6 +126,13 @@ impl Service for Proxy {
     }
 }
 
+impl Proxy {
+    /// Check if we have a response for this request in memory.
+    fn cache_lookup(&self, request: &Request<Body>) -> Option<Response<Body>> {
+        None
+    }
+}
+
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
     let runtime = start_server_background(port, upstream_port)
         .chain_err(|| "Spawning server thread failed")?;
@@ -142,6 +157,11 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
     let client = Client::new();
     let http = Http::new();
 
+    let time_to_live = ::std::time::Duration::from_secs(1);
+    let inner_cache =
+        LruCache::<String, Response<Body>>::with_expiry_duration_and_capacity(time_to_live, 20);
+    let cache = Arc::new(RwLock::new(inner_cache));
+
     let server = listener
         .incoming()
         .for_each(move |socket| {
@@ -154,6 +174,7 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
                         upstream_port,
                         client: client.clone(),
                         source_address,
+                        cache: cache.clone(),
                     },
                 ).map(|_| ())
                 .map_err(|_| ()),

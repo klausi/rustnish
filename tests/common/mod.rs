@@ -9,8 +9,6 @@ use hyper::{Body, Request, Response};
 use hyper::{Client, Server, Uri};
 use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
-use std::sync::mpsc;
-use std::thread;
 
 // Return the received request in the response body for testing purposes.
 pub fn echo_request(request: Request<Body>) -> Response<Body> {
@@ -23,30 +21,17 @@ pub fn echo_request(request: Request<Body>) -> Response<Body> {
 pub fn start_dummy_server(
     port: u16,
     response_function: fn(Request<Body>) -> Response<Body>,
-) -> thread::JoinHandle<()> {
-    // We need to block until the server has bound successfully to the port, so
-    // we block on this channel before we return. As soon as the thread sends
-    // out the signal we can return.
-    let (addr_tx, addr_rx) = mpsc::channel();
+) -> Runtime {
+    let address = "127.0.0.1:".to_owned() + &port.to_string();
+    let addr = address.parse().unwrap();
 
-    let thread = thread::Builder::new()
-        .name("test-server".to_owned())
-        .spawn(move || {
-            let address = "127.0.0.1:".to_owned() + &port.to_string();
-            let addr = address.parse().unwrap();
+    let new_svc = move || service_fn_ok(response_function);
 
-            let new_svc = move || service_fn_ok(response_function);
+    let server = Server::bind(&addr).serve(new_svc).map_err(|_| ());
 
-            let server = Server::bind(&addr).serve(new_svc).map_err(|_| ());
-
-            addr_tx.send(true).unwrap();
-
-            hyper::rt::run(server);
-        }).unwrap();
-
-    let _bind_ready = addr_rx.recv().unwrap();
-
-    thread
+    let mut runtime = Runtime::new().unwrap();
+    runtime.spawn(server);
+    runtime
 }
 
 // Since it so complicated to make a client request with a Hyper runtime we have
