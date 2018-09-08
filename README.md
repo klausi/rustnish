@@ -97,7 +97,25 @@ reliable and made different parts of the test case fail.
 
 ## Goal 9: Benchmark against Varnish
 
-Completed: no
+Completed: yes
 
 Write benchmark code that compares runtime performance of Rustnish against
 [Varnish](https://varnish-cache.org/). Use `cargo bench` to execute the benchmarks.
+
+## Goal 10: Cache 20 upstream responses
+
+Completed: no
+
+Create an in-memory store that caches GET HTTP responses for anonymous users.
+* A response is considered cachable if the Cache-Control HTTP header contains
+"public" and a "max-age" value.
+* A request is considered anonymous if the Cookie HTTP header does not contain a key that starts with "SESS".
+* The cache key is the full URL path (including query parameters).
+* Cache entries should be kept for 1 minute.
+* A maximum of 20 cache entries should be used.
+
+## Future goals
+
+* Add HTTP Age header
+* Read proxy config from config file
+* Read proxy config from Varnish syntax config file
