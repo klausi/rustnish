@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
+extern crate http;
 extern crate hyper;
 extern crate lru_time_cache;
 extern crate tokio;
@@ -8,18 +9,19 @@ extern crate tokio;
 use errors::ResultExt;
 use errors::*;
 use futures::{Future, Stream};
+use http::response::Parts;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
-use hyper::header::{SERVER, VIA};
+use hyper::header::{HeaderValue, SERVER, VIA};
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Client;
 use hyper::StatusCode;
 use hyper::Version;
-use hyper::{Body, Request, Response};
+use hyper::{Body, HeaderMap, Request, Response};
 use lru_time_cache::LruCache;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 
@@ -34,7 +36,7 @@ struct Proxy {
     client: Client<HttpConnector>,
     // The socket address the original request is coming from.
     source_address: SocketAddr,
-    cache: Arc<RwLock<LruCache<String, Response<Body>>>>,
+    cache: Cache,
 }
 
 impl Service for Proxy {
@@ -44,7 +46,9 @@ impl Service for Proxy {
     type Future = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
-        if let Some(response) = self.cache_lookup(&request) {
+        let cache_key = self.cache.cache_key(&request);
+
+        if let Some(response) = self.cache.lookup(&cache_key) {
             return Box::new(futures::future::ok(response));
         }
 
@@ -90,7 +94,9 @@ impl Service for Proxy {
             );
         }
 
-        Box::new(self.client.request(request).then(|result| {
+        let mut cloned_cache = self.cache.clone();
+
+        Box::new(self.client.request(request).then(move |result| {
             let our_response = match result {
                 Ok(mut response) => {
                     let version = match response.version() {
@@ -110,7 +116,13 @@ impl Service for Proxy {
                         }
                     }
 
-                    response
+                    let (parts, body) = response.into_parts();
+                    let body_bytes = body.concat2().wait().unwrap().to_vec();
+
+                    // Put the response into the cache.
+                    cloned_cache.store(cache_key, &parts, body_bytes.clone());
+
+                    Response::from_parts(parts, Body::from(body_bytes))
                 }
                 Err(_) => {
                     // For security reasons do not show the exact error to end users.
@@ -126,10 +138,58 @@ impl Service for Proxy {
     }
 }
 
-impl Proxy {
+struct CachedResponse {
+    status: StatusCode,
+    version: Version,
+    headers: HeaderMap<HeaderValue>,
+    body: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct Cache {
+    lru_cache: Arc<Mutex<LruCache<String, CachedResponse>>>,
+}
+
+impl Cache {
+    fn cache_key(&self, request: &Request<Body>) -> Option<String> {
+        Some("x".to_string())
+    }
+
     /// Check if we have a response for this request in memory.
-    fn cache_lookup(&self, request: &Request<Body>) -> Option<Response<Body>> {
-        None
+    fn lookup(&mut self, cache_key: &Option<String>) -> Option<Response<Body>> {
+        let mut inner_cache = self.lru_cache.lock().unwrap();
+        match inner_cache.get("x") {
+            Some(entry) => {
+                let mut response = Response::builder()
+                    .status(entry.status)
+                    .version(entry.version)
+                    .body(Body::from(entry.body.clone()))
+                    .unwrap();
+                *response.headers_mut() = entry.headers.clone();
+                Some(response)
+            }
+            None => None,
+        }
+    }
+
+    fn store(
+        &mut self,
+        cache_key: Option<String>,
+        header_part: &Parts,
+        body_bytes: Vec<u8>,
+    ) -> bool {
+        if let Some(key) = cache_key {
+            let mut inner_cache = self.lru_cache.lock().unwrap();
+            let entry = CachedResponse {
+                status: header_part.status,
+                version: header_part.version,
+                headers: header_part.headers.clone(),
+                body: body_bytes,
+            };
+            inner_cache.insert(key, entry);
+            return true;
+        }
+        false
     }
 }
 
@@ -159,8 +219,10 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
 
     let time_to_live = ::std::time::Duration::from_secs(1);
     let inner_cache =
-        LruCache::<String, Response<Body>>::with_expiry_duration_and_capacity(time_to_live, 20);
-    let cache = Arc::new(RwLock::new(inner_cache));
+        LruCache::<String, CachedResponse>::with_expiry_duration_and_capacity(time_to_live, 20);
+    let cache = Cache {
+        lru_cache: Arc::new(Mutex::new(inner_cache)),
+    };
 
     let server = listener
         .incoming()
