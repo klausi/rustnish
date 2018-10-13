@@ -9,11 +9,10 @@ extern crate tokio;
 use errors::ResultExt;
 use errors::*;
 use futures::{Future, Stream};
-use http::response::Parts;
 use http::Method;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
-use hyper::header::{HeaderValue, SERVER, VIA};
+use hyper::header::{HeaderValue, CACHE_CONTROL, SERVER, VIA};
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Client;
@@ -23,6 +22,7 @@ use hyper::{Body, HeaderMap, Request, Response};
 use lru_time_cache::LruCache;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 
@@ -117,13 +117,8 @@ impl Service for Proxy {
                         }
                     }
 
-                    let (parts, body) = response.into_parts();
-                    let body_bytes = body.concat2().wait().unwrap().to_vec();
-
-                    // Put the response into the cache.
-                    cloned_cache.store(cache_key, &parts, body_bytes.clone());
-
-                    Response::from_parts(parts, Body::from(body_bytes))
+                    // Put the response into the cache if possible.
+                    cloned_cache.store(cache_key, response)
                 }
                 Err(_) => {
                     // For security reasons do not show the exact error to end users.
@@ -144,6 +139,7 @@ struct CachedResponse {
     version: Version,
     headers: HeaderMap<HeaderValue>,
     body: Vec<u8>,
+    expires: Instant,
 }
 
 #[derive(Clone)]
@@ -184,24 +180,69 @@ impl Cache {
     }
 
     // @todo should we take the cache key as option or not?
-    fn store(
-        &mut self,
-        cache_key: Option<String>,
-        header_part: &Parts,
-        body_bytes: Vec<u8>,
-    ) -> bool {
-        if let Some(key) = cache_key {
-            let mut inner_cache = self.lru_cache.lock().unwrap();
-            let entry = CachedResponse {
-                status: header_part.status,
-                version: header_part.version,
-                headers: header_part.headers.clone(),
-                body: body_bytes,
-            };
-            inner_cache.insert(key, entry);
-            return true;
+    fn store(&mut self, cache_key: Option<String>, response: Response<Body>) -> Response<Body> {
+        match cache_key {
+            None => response,
+            Some(key) => {
+                // Only cache the response if it has a max-age.
+                match self.get_max_age(&response) {
+                    None => response,
+                    Some(max_age) => {
+                        // In order to be able to cache the response we have to fully
+                        // consume it, clone it and rebuild it. Super ugly, any better
+                        // ideas?
+                        let (header_part, body) = response.into_parts();
+                        let body_bytes = body.concat2().wait().unwrap().to_vec();
+
+                        let mut inner_cache = self.lru_cache.lock().unwrap();
+                        let entry = CachedResponse {
+                            status: header_part.status,
+                            version: header_part.version,
+                            headers: header_part.headers.clone(),
+                            body: body_bytes.clone(),
+                            // Store an expiry date for this repsponse. After
+                            // that point in time we need to discard it.
+                            expires: Instant::now() + Duration::from_secs(max_age),
+                        };
+                        inner_cache.insert(key, entry);
+
+                        Response::from_parts(header_part, Body::from(body_bytes))
+                    }
+                }
+            }
         }
-        false
+    }
+
+    fn get_max_age(&self, response: &Response<Body>) -> Option<u64> {
+        let mut public = false;
+        let mut max_age: u64 = 0;
+        {
+            // Make sure that the response is cachable.
+            let cache_control = response.headers().get_all(CACHE_CONTROL);
+            for header_value in cache_control {
+                if let Ok(header_string) = header_value.to_str() {
+                    let comma_values = header_string.split(",");
+                    for comma_value in comma_values {
+                        if comma_value == "public" {
+                            public = true;
+                            continue;
+                        }
+                        let equal_value: Vec<&str> = comma_value.split("=").collect();
+                        if equal_value.len() == 2 && equal_value[0] == "max-age" {
+                            max_age = match equal_value[1].parse() {
+                                Ok(value) => value,
+                                Err(_) => 0,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        if public && max_age > 0 {
+            return Some(max_age);
+        }
+        None
     }
 }
 
@@ -229,7 +270,7 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
     let client = Client::new();
     let http = Http::new();
 
-    let time_to_live = ::std::time::Duration::from_secs(1);
+    let time_to_live = ::std::time::Duration::from_secs(60);
     let inner_cache =
         LruCache::<String, CachedResponse>::with_expiry_duration_and_capacity(time_to_live, 20);
     let cache = Cache {

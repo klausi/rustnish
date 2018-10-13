@@ -47,3 +47,25 @@ fn upstream_down_cache() {
     let response3 = common::client_get(test_url);
     assert_eq!(response3.status(), StatusCode::BAD_GATEWAY);
 }
+
+// If a response does not have a max age header then it must not be cached.
+#[test]
+fn no_max_age_means_uncachable() {
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
+
+    let upstream_server = common::start_dummy_server(upstream_port, echo_request);
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    let url: Uri = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    // This request should not populate the cache.
+    common::client_get(url.clone());
+
+    upstream_server.shutdown_now().wait().unwrap();
+
+    // We must not get a cached response.
+    let response2 = common::client_get(url);
+    assert_eq!(response2.status(), StatusCode::BAD_GATEWAY);
+}
