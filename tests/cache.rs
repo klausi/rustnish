@@ -3,11 +3,10 @@ extern crate hyper;
 extern crate rustnish;
 
 use common::echo_request;
-use futures::{Future, Stream};
-use hyper::header::{CACHE_CONTROL, HOST, SERVER, VIA};
+use futures::Future;
+use hyper::header::CACHE_CONTROL;
 use hyper::StatusCode;
-use hyper::{Body, Request, Uri};
-use std::str;
+use hyper::Uri;
 
 mod common;
 
@@ -39,4 +38,12 @@ fn upstream_down_cache() {
     // We should still get a valid cached response.
     let response2 = common::client_get(url);
     assert_eq!(response2.status(), StatusCode::OK);
+
+    // Any other path is not cached and should return a 502 because the
+    // upsatream server is down.
+    let test_url: Uri = ("http://127.0.0.1:".to_string() + &port.to_string() + "/test")
+        .parse()
+        .unwrap();
+    let response3 = common::client_get(test_url);
+    assert_eq!(response3.status(), StatusCode::BAD_GATEWAY);
 }

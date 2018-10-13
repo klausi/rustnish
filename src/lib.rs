@@ -10,6 +10,7 @@ use errors::ResultExt;
 use errors::*;
 use futures::{Future, Stream};
 use http::response::Parts;
+use http::Method;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
 use hyper::header::{HeaderValue, SERVER, VIA};
@@ -151,27 +152,38 @@ struct Cache {
 }
 
 impl Cache {
+    /// Convert an incoming request into a cache key that we can then lookup.
     fn cache_key(&self, request: &Request<Body>) -> Option<String> {
-        Some("x".to_string())
+        // Only GET requests are cachable.
+        if request.method() != Method::GET {
+            return None;
+        }
+        Some(request.uri().to_string())
     }
 
     /// Check if we have a response for this request in memory.
     fn lookup(&mut self, cache_key: &Option<String>) -> Option<Response<Body>> {
-        let mut inner_cache = self.lru_cache.lock().unwrap();
-        match inner_cache.get("x") {
-            Some(entry) => {
-                let mut response = Response::builder()
-                    .status(entry.status)
-                    .version(entry.version)
-                    .body(Body::from(entry.body.clone()))
-                    .unwrap();
-                *response.headers_mut() = entry.headers.clone();
-                Some(response)
-            }
+        match cache_key {
             None => None,
+            Some(cache_key) => {
+                let mut inner_cache = self.lru_cache.lock().unwrap();
+                match inner_cache.get(cache_key) {
+                    Some(entry) => {
+                        let mut response = Response::builder()
+                            .status(entry.status)
+                            .version(entry.version)
+                            .body(Body::from(entry.body.clone()))
+                            .unwrap();
+                        *response.headers_mut() = entry.headers.clone();
+                        Some(response)
+                    }
+                    None => None,
+                }
+            }
         }
     }
 
+    // @todo should we take the cache key as option or not?
     fn store(
         &mut self,
         cache_key: Option<String>,
@@ -238,11 +250,13 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
                         source_address,
                         cache: cache.clone(),
                     },
-                ).map(|_| ())
+                )
+                .map(|_| ())
                 .map_err(|_| ()),
             );
             Ok(())
-        }).map_err(|e| panic!("accept error: {}", e));
+        })
+        .map_err(|e| panic!("accept error: {}", e));
 
     println!("Listening on http://{}", address);
     runtime.spawn(server);
