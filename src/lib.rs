@@ -163,18 +163,29 @@ impl Cache {
             None => None,
             Some(cache_key) => {
                 let mut inner_cache = self.lru_cache.lock().unwrap();
-                match inner_cache.get(cache_key) {
+                let mut should_remove = false;
+                let result = match inner_cache.get(cache_key) {
                     Some(entry) => {
-                        let mut response = Response::builder()
-                            .status(entry.status)
-                            .version(entry.version)
-                            .body(Body::from(entry.body.clone()))
-                            .unwrap();
-                        *response.headers_mut() = entry.headers.clone();
-                        Some(response)
+                        // Only provide a cached response if it has not expired yet.
+                        if entry.expires > Instant::now() {
+                            let mut response = Response::builder()
+                                .status(entry.status)
+                                .version(entry.version)
+                                .body(Body::from(entry.body.clone()))
+                                .unwrap();
+                            *response.headers_mut() = entry.headers.clone();
+                            Some(response)
+                        } else {
+                            should_remove = true;
+                            None
+                        }
                     }
                     None => None,
+                };
+                if should_remove {
+                    inner_cache.remove(cache_key);
                 }
+                result
             }
         }
     }
@@ -221,13 +232,13 @@ impl Cache {
             let cache_control = response.headers().get_all(CACHE_CONTROL);
             for header_value in cache_control {
                 if let Ok(header_string) = header_value.to_str() {
-                    let comma_values = header_string.split(",");
+                    let comma_values = header_string.split(',');
                     for comma_value in comma_values {
                         if comma_value == "public" {
                             public = true;
                             continue;
                         }
-                        let equal_value: Vec<&str> = comma_value.split("=").collect();
+                        let equal_value: Vec<&str> = comma_value.split('=').collect();
                         if equal_value.len() == 2 && equal_value[0] == "max-age" {
                             max_age = match equal_value[1].parse() {
                                 Ok(value) => value,

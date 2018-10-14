@@ -7,6 +7,8 @@ use futures::Future;
 use hyper::header::CACHE_CONTROL;
 use hyper::StatusCode;
 use hyper::Uri;
+use std::thread;
+use std::time::Duration;
 
 mod common;
 
@@ -64,6 +66,39 @@ fn no_max_age_means_uncachable() {
     common::client_get(url.clone());
 
     upstream_server.shutdown_now().wait().unwrap();
+
+    // We must not get a cached response.
+    let response2 = common::client_get(url);
+    assert_eq!(response2.status(), StatusCode::BAD_GATEWAY);
+}
+
+// A response must not be cached longer than the max-age cache-control headers
+// says.
+#[test]
+fn max_age_expired() {
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
+
+    let upstream_server = common::start_dummy_server(upstream_port, |request| {
+        let mut response = echo_request(request);
+        {
+            let headers = response.headers_mut();
+            headers.append(CACHE_CONTROL, "public,max-age=1".parse().unwrap());
+        }
+        response
+    });
+    let _proxy = rustnish::start_server_background(port, upstream_port);
+
+    let url: Uri = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    // This request should populate the cache.
+    common::client_get(url.clone());
+
+    upstream_server.shutdown_now().wait().unwrap();
+
+    // Wait 1 second, then the cache must have expired this response.
+    thread::sleep(Duration::from_secs(1));
 
     // We must not get a cached response.
     let response2 = common::client_get(url);
