@@ -104,7 +104,7 @@ Write benchmark code that compares runtime performance of Rustnish against
 
 ## Goal 10: Cache 20 upstream responses
 
-Completed: no
+Completed: yes
 
 Create an in-memory store that caches GET HTTP responses for anonymous users.
 * A response is considered cachable if the Cache-Control HTTP header contains
@@ -116,6 +116,7 @@ Create an in-memory store that caches GET HTTP responses for anonymous users.
 
 ## Possible future goals
 
+* Use a LRU cache library with memory limit, e.g. 256MB RAM
 * Add HTTP Age header
 * Read proxy config from config file
 * Read proxy config from Varnish syntax config file
