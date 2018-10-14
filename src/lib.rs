@@ -4,6 +4,7 @@ extern crate futures;
 extern crate http;
 extern crate hyper;
 extern crate lru_time_cache;
+extern crate regex;
 extern crate tokio;
 
 use errors::ResultExt;
@@ -12,7 +13,7 @@ use futures::{Future, Stream};
 use http::Method;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
-use hyper::header::{HeaderValue, CACHE_CONTROL, SERVER, VIA};
+use hyper::header::{HeaderValue, CACHE_CONTROL, COOKIE, SERVER, VIA};
 use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::Client;
@@ -20,6 +21,7 @@ use hyper::StatusCode;
 use hyper::Version;
 use hyper::{Body, HeaderMap, Request, Response};
 use lru_time_cache::LruCache;
+use regex::Regex;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -153,6 +155,15 @@ impl Cache {
         // Only GET requests are cachable.
         if request.method() != Method::GET {
             return None;
+        }
+        // Requests with a session cookie cannot be cached.
+        if let Some(cookie_header) = request.headers().get(COOKIE) {
+            if let Ok(cookie_string) = cookie_header.to_str() {
+                let regex = Regex::new(r"SESS[A-Za-z0-9_]+=").unwrap();
+                if regex.is_match(cookie_string) {
+                    return None;
+                }
+            }
         }
         Some(request.uri().to_string())
     }

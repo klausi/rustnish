@@ -114,8 +114,9 @@ Create an in-memory store that caches GET HTTP responses for anonymous users.
 * Cache entries should be kept for 1 minute.
 * A maximum of 20 cache entries should be used.
 
-## Future goals
+## Possible future goals
 
 * Add HTTP Age header
 * Read proxy config from config file
 * Read proxy config from Varnish syntax config file
+* Support Vary HTTP header in responses
