@@ -142,7 +142,6 @@ struct CachedResponse {
     version: Version,
     headers: HeaderMap<HeaderValue>,
     body: Vec<u8>,
-    expires: Instant,
 }
 
 #[derive(Clone)]
@@ -175,29 +174,18 @@ impl Cache {
             None => None,
             Some(cache_key) => {
                 let mut inner_cache = self.lru_cache.lock().unwrap();
-                let mut should_remove = false;
-                let result = match inner_cache.get(cache_key) {
+                match inner_cache.get(cache_key) {
                     Some(entry) => {
-                        // Only provide a cached response if it has not expired yet.
-                        if entry.expires > Instant::now() {
-                            let mut response = Response::builder()
-                                .status(entry.status)
-                                .version(entry.version)
-                                .body(Body::from(entry.body.clone()))
-                                .unwrap();
-                            *response.headers_mut() = entry.headers.clone();
-                            Some(response)
-                        } else {
-                            should_remove = true;
-                            None
-                        }
+                        let mut response = Response::builder()
+                            .status(entry.status)
+                            .version(entry.version)
+                            .body(Body::from(entry.body.clone()))
+                            .unwrap();
+                        *response.headers_mut() = entry.headers.clone();
+                        Some(response)
                     }
                     None => None,
-                };
-                if should_remove {
-                    inner_cache.remove(cache_key);
                 }
-                result
             }
         }
     }
@@ -223,11 +211,15 @@ impl Cache {
                             version: header_part.version,
                             headers: header_part.headers.clone(),
                             body: body_bytes.clone(),
-                            // Store an expiry date for this repsponse. After
-                            // that point in time we need to discard it.
-                            expires: Instant::now() + Duration::from_secs(max_age),
                         };
-                        inner_cache.insert(key, entry);
+                        // Store an expiry date for this repsponse. After
+                        // that point in time we need to discard it.
+                        inner_cache.insert(
+                            key,
+                            entry,
+                            5,
+                            Instant::now() + Duration::from_secs(max_age),
+                        );
 
                         Response::from_parts(header_part, Body::from(body_bytes))
                     }
@@ -293,9 +285,8 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
     let client = Client::new();
     let http = Http::new();
 
-    let time_to_live = ::std::time::Duration::from_secs(60);
-    let inner_cache =
-        LruCache::<String, CachedResponse>::with_expiry_duration_and_capacity(time_to_live, 20);
+    // 256MB.
+    let inner_cache = LruCache::<String, CachedResponse>::with_memory_size(256 * 1024 * 1024);
     let cache = Cache {
         lru_cache: Arc::new(Mutex::new(inner_cache)),
     };
