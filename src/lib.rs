@@ -3,10 +3,10 @@ extern crate error_chain;
 extern crate futures;
 extern crate http;
 extern crate hyper;
-extern crate lru_time_cache;
 extern crate regex;
 extern crate tokio;
 
+use cache::LruCache;
 use errors::ResultExt;
 use errors::*;
 use futures::{Future, Stream};
@@ -20,13 +20,14 @@ use hyper::Client;
 use hyper::StatusCode;
 use hyper::Version;
 use hyper::{Body, HeaderMap, Request, Response};
-use lru_time_cache::LruCache;
 use regex::Regex;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
+
+mod cache;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types

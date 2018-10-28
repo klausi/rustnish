@@ -114,9 +114,18 @@ Create an in-memory store that caches GET HTTP responses for anonymous users.
 * Cache entries should be kept for 1 minute.
 * A maximum of 20 cache entries should be used.
 
+
+## Goal 11: Build a memory constrained cache
+
+Completed: no
+
+Improve the in-memory store of cached responses. Make the cache be limited by
+memory size and not by number of cache entries. Use a default of 256MB allowed
+cache memory size.
+
+
 ## Possible future goals
 
-* Use a LRU cache library with memory limit, e.g. 256MB RAM
 * Add HTTP Age header
 * Read proxy config from config file
 * Read proxy config from Varnish syntax config file
