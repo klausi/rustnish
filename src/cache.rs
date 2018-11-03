@@ -278,7 +278,7 @@ where
 
     /// Returns `true` if there are no non-expired entries in the cache.
     pub fn is_empty(&self) -> bool {
-        self.len() > 0
+        self.len() == 0
     }
 
     /// Gets the given key's corresponding entry in the map for in-place manipulation.
@@ -328,18 +328,14 @@ where
     }
 
     fn remove_expired(&mut self) {
-        let (map, list) = (&mut self.map, &mut self.list);
-        if let Some((i, val)) = list
+        let remove_entries = self
+            .map
             .iter()
-            .enumerate()
-            .filter_map(|(i, key)| map.remove(key).map(|val| (i, val)))
-            .find(|&(_, (_, t, _))| t >= Instant::now())
-        {
-            // we have found one item not expired, we must insert it back
-            let _ = map.insert(list[i].clone(), val);
-            let _ = list.drain(..i);
-        } else if map.is_empty() {
-            list.clear();
+            .filter(|(_, (_, t, _))| *t < Instant::now())
+            .map(|(key, (_, _, _))| key.clone())
+            .collect::<Vec<_>>();
+        for key in remove_entries {
+            let _ = self.remove(&key);
         }
     }
 }
@@ -452,35 +448,36 @@ mod test {
         }
     }
 
-    /*#[test]
-    fn time_only() {
+    #[test]
+    fn expiration_time() {
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
-    
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(100usize);
+
         for i in 0..10 {
             assert_eq!(lru_cache.len(), i);
-            let _ = lru_cache.insert(i, i);
+            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
             assert_eq!(lru_cache.len(), i + 1);
         }
-    
+
         sleep(101);
-        let _ = lru_cache.insert(11, 11);
-    
+        let _ = lru_cache.insert(11, 11, 1, Instant::now() + time_to_live);
+
         assert_eq!(lru_cache.len(), 1);
-    
+
         for i in 0..10 {
+            println!("{:#?}", lru_cache);
             assert!(!lru_cache.is_empty());
             assert_eq!(lru_cache.len(), i + 1);
-            let _ = lru_cache.insert(i, i);
+            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
             assert_eq!(lru_cache.len(), i + 2);
         }
-    
+
         sleep(101);
         assert_eq!(0, lru_cache.len());
         assert!(lru_cache.is_empty());
     }
-    
-    #[test]
+
+    /*#[test]
     fn time_only_check() {
         let time_to_live = Duration::from_millis(50);
         let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
