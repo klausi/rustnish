@@ -328,11 +328,13 @@ where
     }
 
     fn remove_expired(&mut self) {
+        // Because of the borrow checker we need to clone the keys to be removed
+        // while accessing the map. Any better ideas how to simplify this?
         let remove_entries = self
             .map
             .iter()
             .filter(|(_, (_, t, _))| *t < Instant::now())
-            .map(|(key, (_, _, _))| key.clone())
+            .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
         for key in remove_entries {
             let _ = self.remove(&key);
