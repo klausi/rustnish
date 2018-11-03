@@ -70,25 +70,6 @@ use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::time::Instant;
 use std::usize;
 
-/// A view into a single entry in an LRU cache, which may either be vacant or occupied.
-pub enum Entry<'a, Key: 'a, Value: 'a> {
-    /// A vacant Entry
-    Vacant(VacantEntry<'a, Key, Value>),
-    /// An occupied Entry
-    Occupied(OccupiedEntry<'a, Value>),
-}
-
-/// A vacant Entry.
-pub struct VacantEntry<'a, Key: 'a, Value: 'a> {
-    key: Key,
-    cache: &'a mut LruCache<Key, Value>,
-}
-
-/// An occupied Entry.
-pub struct OccupiedEntry<'a, Value: 'a> {
-    value: &'a mut Value,
-}
-
 /// An iterator over an `LruCache`'s entries that updates the timestamps as values are traversed.
 pub struct Iter<'a, Key: 'a, Value: 'a> {
     map_iter_mut: btree_map::IterMut<'a, Key, (Value, Instant, usize)>,
@@ -226,7 +207,13 @@ where
         Key: Borrow<Q>,
         Q: Ord,
     {
-        self.get_mut(key).map(|v| &*v)
+        self.remove_expired();
+
+        let list = &mut self.list;
+        self.map.get_mut(key).map(|result| {
+            Self::update_key(list, key);
+            &result.0
+        })
     }
 
     /// Returns a reference to the value with the given `key`, if present and not expired, without
@@ -241,22 +228,6 @@ where
             .into_iter()
             .find(|&(_, t, _)| *t >= Instant::now())
             .map(|&(ref value, _, _)| value)
-    }
-
-    /// Retrieves a mutable reference to the value stored under `key`, or `None` if the key doesn't
-    /// exist.  Also removes expired elements and updates the time.
-    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut Value>
-    where
-        Key: Borrow<Q>,
-        Q: Ord,
-    {
-        self.remove_expired();
-
-        let list = &mut self.list;
-        self.map.get_mut(key).map(|result| {
-            Self::update_key(list, key);
-            &mut result.0
-        })
     }
 
     /// Returns whether `key` exists in the cache or not.
@@ -279,23 +250,6 @@ where
     /// Returns `true` if there are no non-expired entries in the cache.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    /// Gets the given key's corresponding entry in the map for in-place manipulation.
-    pub fn entry(&mut self, key: Key) -> Entry<Key, Value> {
-        // We need to do it the ugly way below due to this issue:
-        // https://github.com/rust-lang/rfcs/issues/811
-        // match self.get_mut(&key) {
-        //     Some(value) => Entry::Occupied(OccupiedEntry{value: value}),
-        //     None => Entry::Vacant(VacantEntry{key: key, cache: self}),
-        // }
-        if self.contains_key(&key) {
-            Entry::Occupied(OccupiedEntry {
-                value: self.get_mut(&key).expect("key not found"),
-            })
-        } else {
-            Entry::Vacant(VacantEntry { key, cache: self })
-        }
     }
 
     /// Returns an iterator over all entries that updates the timestamps as values are
@@ -353,48 +307,6 @@ where
             list: self.list.clone(),
             max_memory_size: self.max_memory_size,
             current_memory_size: self.current_memory_size,
-        }
-    }
-}
-
-impl<'a, Key: Ord + Clone, Value> VacantEntry<'a, Key, Value> {
-    /// Inserts a value
-    pub fn insert(self, value: Value, memory_size: usize, expires: Instant) -> &'a mut Value {
-        let _ = self
-            .cache
-            .insert(self.key.clone(), value, memory_size, expires);
-        self.cache.get_mut(&self.key).expect("key not found")
-    }
-}
-
-impl<'a, Value> OccupiedEntry<'a, Value> {
-    /// Converts the entry into a mutable reference to its value.
-    pub fn into_mut(self) -> &'a mut Value {
-        self.value
-    }
-}
-
-impl<'a, Key: Ord + Clone, Value> Entry<'a, Key, Value> {
-    /// Ensures a value is in the entry by inserting the default if empty, and returns
-    /// a mutable reference to the value in the entry.
-    pub fn or_insert(self, default: Value, memory_size: usize, expires: Instant) -> &'a mut Value {
-        match self {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(default, memory_size, expires),
-        }
-    }
-
-    /// Ensures a value is in the entry by inserting the result of the default function if empty,
-    /// and returns a mutable reference to the value in the entry.
-    pub fn or_insert_with<F: FnOnce() -> Value>(
-        self,
-        default: F,
-        memory_size: usize,
-        expires: Instant,
-    ) -> &'a mut Value {
-        match self {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => entry.insert(default(), memory_size, expires),
         }
     }
 }
