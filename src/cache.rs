@@ -12,7 +12,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png",
     html_favicon_url = "https://maidsafe.net/img/favicon.ico",
-    test(attr(forbid(warnings))),
+    test(attr(forbid(warnings)))
 )]
 // For explanation of lint checks, run `rustc -W help` or see
 // https://github.com/maidsafe/QA/blob/master/Documentation/Rust%20Lint%20Checks.md
@@ -21,7 +21,7 @@
     exceeding_bitshifts,
     mutable_transmutes,
     no_mangle_const_items,
-    unknown_crate_types,
+    unknown_crate_types
 )]
 #![deny(
     deprecated,
@@ -54,7 +54,7 @@
     missing_copy_implementations,
     missing_debug_implementations,
     variant_size_differences,
-    dead_code,
+    dead_code
 )]
 
 #[cfg(feature = "fake_clock")]
@@ -133,6 +133,7 @@ where
 }
 
 /// Implementation of [LRU cache](index.html#least-recently-used-lru-cache).
+#[derive(Debug)]
 pub struct LruCache<Key, Value> {
     // Store the value itself, the expires date and a memory size of the value.
     // @todo make this a proper struct instead of an anonymous tuple.
@@ -170,23 +171,28 @@ where
         memory_size: usize,
         expires: Instant,
     ) -> Option<Value> {
-        if self.map.contains_key(&key) {
-            Self::update_key(&mut self.list, &key);
-        } else {
-            self.remove_expired();
+        self.remove_expired();
+        let old_value = self.remove(&key);
+
+        if memory_size <= self.max_memory_size {
+            // Remove old cache entries until we have room to insert the new item.
             while self.max_memory_size < self.current_memory_size + memory_size {
                 let remove_key = self
                     .list
                     .pop_front()
                     .expect("Queue is empty but current memory size > 0");
-                assert!(self.map.remove(&remove_key).is_some());
+                let (_, _, removed_size) = self
+                    .map
+                    .remove(&remove_key)
+                    .expect("Shrinking cache failed");
+                self.current_memory_size -= removed_size;
             }
             self.list.push_back(key.clone());
-        }
 
-        self.map
-            .insert(key, (value, expires, memory_size))
-            .map(|pair| pair.0)
+            self.current_memory_size += memory_size;
+            let _ = self.map.insert(key, (value, expires, memory_size));
+        }
+        old_value
     }
 
     /// Removes a key-value pair from the cache.
@@ -195,12 +201,13 @@ where
         Key: Borrow<Q>,
         Q: Ord,
     {
-        self.map.remove(key).map(|(value, _, _)| {
+        self.map.remove(key).map(|(value, _, memory_size)| {
             let _ = self
                 .list
                 .iter()
                 .position(|l| l.borrow() == key)
                 .map(|p| self.list.remove(p));
+            self.current_memory_size -= memory_size;
             value
         })
     }
@@ -209,6 +216,7 @@ where
     pub fn clear(&mut self) {
         self.map.clear();
         self.list.clear();
+        self.current_memory_size = 0;
     }
 
     /// Retrieves a reference to the value stored under `key`, or `None` if the key doesn't exist.
@@ -247,7 +255,6 @@ where
         let list = &mut self.list;
         self.map.get_mut(key).map(|result| {
             Self::update_key(list, key);
-            result.1 = Instant::now();
             &mut result.0
         })
     }
