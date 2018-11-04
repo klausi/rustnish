@@ -379,7 +379,6 @@ mod test {
         assert_eq!(lru_cache.len(), 1);
 
         for i in 0..10 {
-            println!("{:#?}", lru_cache);
             assert!(!lru_cache.is_empty());
             assert_eq!(lru_cache.len(), i + 1);
             let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
@@ -391,150 +390,107 @@ mod test {
         assert!(lru_cache.is_empty());
     }
 
-    /*#[test]
-    fn time_only_check() {
-        let time_to_live = Duration::from_millis(50);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
-    
-        assert_eq!(lru_cache.len(), 0);
-        let _ = lru_cache.insert(0, 0);
-        assert_eq!(lru_cache.len(), 1);
-    
-        sleep(101);
-    
-        assert!(!lru_cache.contains_key(&0));
-        assert_eq!(lru_cache.len(), 0);
-    }
-    
     #[test]
     fn time_and_size() {
         let size = 10usize;
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache =
-            super::LruCache::<usize, usize>::with_expiry_duration_and_capacity(time_to_live, size);
-    
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(size);
+
         for i in 0..1000 {
             if i < size {
                 assert_eq!(lru_cache.len(), i);
             }
-    
-            let _ = lru_cache.insert(i, i);
-    
+
+            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
+
             if i < size {
                 assert_eq!(lru_cache.len(), i + 1);
             } else {
                 assert_eq!(lru_cache.len(), size);
             }
         }
-    
+
         sleep(101);
-        let _ = lru_cache.insert(1, 1);
-    
+        let _ = lru_cache.insert(1, 1, 1, Instant::now() + time_to_live);
+
         assert_eq!(lru_cache.len(), 1);
     }
-    
+
     #[derive(PartialEq, PartialOrd, Ord, Clone, Eq)]
     struct Temp {
         id: Vec<u8>,
     }
-    
+
     #[test]
     fn time_size_struct_value() {
         let size = 100usize;
         let time_to_live = Duration::from_millis(100);
-    
-        let mut lru_cache =
-            super::LruCache::<Temp, usize>::with_expiry_duration_and_capacity(time_to_live, size);
-    
+
+        let mut lru_cache = super::LruCache::<Temp, usize>::with_memory_size(size);
+
         for i in 0..1000 {
             if i < size {
                 assert_eq!(lru_cache.len(), i);
             }
-    
+
             let _ = lru_cache.insert(
                 Temp {
                     id: generate_random_vec::<u8>(64),
                 },
                 i,
+                1,
+                Instant::now() + time_to_live,
             );
-    
+
             if i < size {
                 assert_eq!(lru_cache.len(), i + 1);
             } else {
                 assert_eq!(lru_cache.len(), size);
             }
         }
-    
+
         sleep(101);
         let _ = lru_cache.insert(
             Temp {
                 id: generate_random_vec::<u8>(64),
             },
             1,
+            1,
+            Instant::now() + time_to_live,
         );
-    
+
         assert_eq!(lru_cache.len(), 1);
     }
-    
-    #[test]
-    fn iter() {
-        let mut lru_cache = super::LruCache::<usize, usize>::with_capacity(3);
-    
-        let _ = lru_cache.insert(0, 0);
-        sleep(1);
-        let _ = lru_cache.insert(1, 1);
-        sleep(1);
-        let _ = lru_cache.insert(2, 2);
-        sleep(1);
-    
-        assert_eq!(
-            vec![(&0, &0), (&1, &1), (&2, &2)],
-            lru_cache.iter().collect::<Vec<_>>()
-        );
-    
-        let initial_instant0 = lru_cache.map[&0].1;
-        let initial_instant2 = lru_cache.map[&2].1;
-        sleep(1);
-    
-        // only the first two entries should have their timestamp updated (and position in list)
-        let _ = lru_cache.iter().take(2).all(|_| true);
-    
-        assert_ne!(lru_cache.map[&0].1, initial_instant0);
-        assert_eq!(lru_cache.map[&2].1, initial_instant2);
-    
-        assert_eq!(*lru_cache.list.front().unwrap(), 2);
-        assert_eq!(*lru_cache.list.back().unwrap(), 1);
-    }
-    
+
     #[test]
     fn peek_iter() {
-        let time_to_live = Duration::from_millis(500);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
-    
-        let _ = lru_cache.insert(0, 0);
-        let _ = lru_cache.insert(2, 2);
-        let _ = lru_cache.insert(3, 3);
-    
-        sleep(300);
+        let time_to_live = Duration::from_millis(100);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10);
+
+        let _ = lru_cache.insert(0, 0, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(2, 2, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(3, 3, 1, Instant::now() + time_to_live);
+
+        sleep(50);
         assert_eq!(
             vec![(&0, &0), (&2, &2), (&3, &3)],
             lru_cache.peek_iter().collect::<Vec<_>>()
         );
         assert_eq!(Some(&2), lru_cache.get(&2));
-        let _ = lru_cache.insert(1, 1);
-        let _ = lru_cache.insert(4, 4);
-    
-        sleep(300);
+        let _ = lru_cache.insert(1, 1, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(4, 4, 1, Instant::now() + time_to_live);
+
+        sleep(50);
         assert_eq!(
-            vec![(&1, &1), (&2, &2), (&4, &4)],
+            vec![(&1, &1), (&4, &4)],
             lru_cache.peek_iter().collect::<Vec<_>>()
         );
-    
-        sleep(300);
+
+        sleep(50);
         assert!(lru_cache.is_empty());
     }
-    
-    #[test]
+
+    /*#[test]
     fn update_time_check() {
         let time_to_live = Duration::from_millis(500);
         let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
