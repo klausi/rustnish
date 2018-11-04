@@ -490,31 +490,34 @@ mod test {
         assert!(lru_cache.is_empty());
     }
 
-    /*#[test]
-    fn update_time_check() {
-        let time_to_live = Duration::from_millis(500);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_expiry_duration(time_to_live);
-    
+    #[test]
+    fn peek_time_check() {
+        let time_to_live = Duration::from_millis(100);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10);
+
         assert_eq!(lru_cache.len(), 0);
-        let _ = lru_cache.insert(0, 0);
+        let _ = lru_cache.insert(0, 0, 1, Instant::now() + time_to_live);
         assert_eq!(lru_cache.len(), 1);
-    
-        sleep(300);
+
+        sleep(50);
         assert_eq!(Some(&0), lru_cache.get(&0));
-        sleep(300);
         assert_eq!(Some(&0), lru_cache.peek(&0));
-        sleep(300);
+        sleep(50);
         assert_eq!(None, lru_cache.peek(&0));
     }
-    
+
     #[test]
     fn deref_coercions() {
-        let mut lru_cache = super::LruCache::<String, usize>::with_capacity(1);
-        let _ = lru_cache.insert("foo".to_string(), 0);
+        let mut lru_cache = super::LruCache::<String, usize>::with_memory_size(1);
+        let _ = lru_cache.insert(
+            "foo".to_string(),
+            0,
+            1,
+            Instant::now() + Duration::from_secs(1000),
+        );
         assert_eq!(true, lru_cache.contains_key("foo"));
         assert_eq!(Some(&0), lru_cache.get("foo"));
-        assert_eq!(Some(&mut 0), lru_cache.get_mut("foo"));
         assert_eq!(Some(&0), lru_cache.peek("foo"));
         assert_eq!(Some(0), lru_cache.remove("foo"));
-    }*/
+    }
 }
