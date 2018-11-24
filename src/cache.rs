@@ -62,6 +62,7 @@ extern crate fake_clock;
 #[cfg(test)]
 extern crate rand;
 
+use super::CachedResponse;
 #[cfg(feature = "fake_clock")]
 use fake_clock::FakeClock as Instant;
 use std::borrow::Borrow;

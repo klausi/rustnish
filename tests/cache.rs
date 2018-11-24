@@ -136,3 +136,32 @@ fn session_cookie_bypass() {
     let response2 = common::client_request(request.body(Body::empty()).unwrap());
     assert_eq!(response2.status(), StatusCode::BAD_GATEWAY);
 }
+
+// Tests that a very small cache of 10 bytes can never hold an HTTP response.
+/*#[test]
+fn insufficient_cache_size() {
+    let port = common::get_free_port();
+    let upstream_port = common::get_free_port();
+
+    let upstream_server = common::start_dummy_server(upstream_port, |request| {
+        let mut response = echo_request(request);
+        {
+            let headers = response.headers_mut();
+            headers.append(CACHE_CONTROL, "public,max-age=1800".parse().unwrap());
+        }
+        response
+    });
+    let _proxy = rustnish::start_server_background_memory(port, upstream_port, 10);
+
+    let url: Uri = ("http://127.0.0.1:".to_string() + &port.to_string())
+        .parse()
+        .unwrap();
+    // This request should not populate the cache.
+    common::client_get(url.clone());
+
+    upstream_server.shutdown_now().wait().unwrap();
+
+    // We must not get a cached response because the cache is too small.
+    let response2 = common::client_get(url);
+    assert_eq!(response2.status(), StatusCode::BAD_GATEWAY);
+}*/

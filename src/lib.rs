@@ -21,6 +21,7 @@ use hyper::StatusCode;
 use hyper::Version;
 use hyper::{Body, HeaderMap, Request, Response};
 use regex::Regex;
+use std::mem::size_of_val;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -31,7 +32,7 @@ mod cache;
 
 mod errors {
     // Create the Error, ErrorKind, ResultExt, and Result types
-    error_chain!{}
+    error_chain! {}
 }
 
 struct Proxy {
@@ -212,12 +213,13 @@ impl Cache {
                             headers: header_part.headers.clone(),
                             body: body_bytes.clone(),
                         };
+                        let memory_size = get_memory_size(&entry);
                         // Store an expiry date for this repsponse. After
                         // that point in time we need to discard it.
                         inner_cache.insert(
                             key,
                             entry,
-                            5,
+                            memory_size,
                             Instant::now() + Duration::from_secs(max_age),
                         );
 
@@ -261,6 +263,22 @@ impl Cache {
     }
 }
 
+/// Calculates the memory space that is used up by a cached HTTP response.
+/// This is an imprecise approximation.
+fn get_memory_size(cached_response: &CachedResponse) -> usize {
+    // Memory usage of the struct itself.
+    let mut memory_size = size_of_val(cached_response);
+
+    // Memory usage of the header key value pairs.
+    for (key, value) in cached_response.headers.iter() {
+        memory_size += key.as_str().as_bytes().len() + value.len();
+    }
+    // Memory usage of the body bytes.
+    memory_size += cached_response.body.capacity();
+
+    memory_size
+}
+
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
     let runtime = start_server_background(port, upstream_port)
         .chain_err(|| "Spawning server thread failed")?;
@@ -271,6 +289,15 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
 }
 
 pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime> {
+    // 256 MB memory cahce as a default.
+    start_server_background_memory(port, upstream_port, 256 * 1024 * 1024)
+}
+
+pub fn start_server_background_memory(
+    port: u16,
+    upstream_port: u16,
+    memory_size: usize,
+) -> Result<Runtime> {
     let address: SocketAddr = ([127, 0, 0, 1], port).into();
     let mut runtime = Runtime::new().unwrap();
 
@@ -285,8 +312,7 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
     let client = Client::new();
     let http = Http::new();
 
-    // 256MB.
-    let inner_cache = LruCache::<String, CachedResponse>::with_memory_size(256 * 1024 * 1024);
+    let inner_cache = LruCache::<String, CachedResponse>::with_memory_size(memory_size);
     let cache = Cache {
         lru_cache: Arc::new(Mutex::new(inner_cache)),
     };
@@ -317,4 +343,43 @@ pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime>
     runtime.spawn(server);
 
     Ok(runtime)
+}
+
+#[cfg(test)]
+mod tests {
+
+    use hyper::header::HeaderValue;
+    use hyper::{HeaderMap, StatusCode, Version};
+    use {get_memory_size, CachedResponse};
+
+    fn example_cache_entry() -> CachedResponse {
+        CachedResponse {
+            status: StatusCode::OK,
+            version: Version::HTTP_11,
+            headers: HeaderMap::new(),
+            body: "a".into(),
+        }
+    }
+
+    #[test]
+    fn cache_memory_size() {
+        let cache_entry = example_cache_entry();
+        assert_eq!(129, get_memory_size(&cache_entry));
+    }
+
+    #[test]
+    fn body_100_bytes() {
+        let mut cache_entry = example_cache_entry();
+        cache_entry.body = vec![b'a'; 100];
+        assert_eq!(228, get_memory_size(&cache_entry));
+    }
+
+    #[test]
+    fn one_header_size() {
+        let mut cache_entry = example_cache_entry();
+        cache_entry
+            .headers
+            .insert("a", HeaderValue::from_static("b"));
+        assert_eq!(131, get_memory_size(&cache_entry));
+    }
 }
