@@ -7,6 +7,7 @@ extern crate regex;
 extern crate tokio;
 
 use cache::LruCache;
+use cache::MemorySizable;
 use errors::ResultExt;
 use errors::*;
 use futures::{Future, Stream};
@@ -145,6 +146,24 @@ struct CachedResponse {
     body: Vec<u8>,
 }
 
+/// Calculates the memory space that is used up by a cached HTTP response.
+/// This is an imprecise approximation.
+impl MemorySizable for CachedResponse {
+    fn get_memory_size(&self) -> usize {
+        // Memory usage of the struct itself.
+        let mut memory_size = size_of_val(self);
+
+        // Memory usage of the header key value pairs.
+        for (key, value) in self.headers.iter() {
+            memory_size += key.as_str().as_bytes().len() + value.len();
+        }
+        // Memory usage of the body bytes.
+        memory_size += self.body.capacity();
+
+        memory_size
+    }
+}
+
 #[derive(Clone)]
 struct Cache {
     lru_cache: Arc<Mutex<LruCache<String, CachedResponse>>>,
@@ -213,13 +232,11 @@ impl Cache {
                             headers: header_part.headers.clone(),
                             body: body_bytes.clone(),
                         };
-                        let memory_size = get_memory_size(&entry);
                         // Store an expiry date for this repsponse. After
                         // that point in time we need to discard it.
                         inner_cache.insert(
                             key,
                             entry,
-                            memory_size,
                             Instant::now() + Duration::from_secs(max_age),
                         );
 
@@ -261,22 +278,6 @@ impl Cache {
         }
         None
     }
-}
-
-/// Calculates the memory space that is used up by a cached HTTP response.
-/// This is an imprecise approximation.
-fn get_memory_size(cached_response: &CachedResponse) -> usize {
-    // Memory usage of the struct itself.
-    let mut memory_size = size_of_val(cached_response);
-
-    // Memory usage of the header key value pairs.
-    for (key, value) in cached_response.headers.iter() {
-        memory_size += key.as_str().as_bytes().len() + value.len();
-    }
-    // Memory usage of the body bytes.
-    memory_size += cached_response.body.capacity();
-
-    memory_size
 }
 
 pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
@@ -348,9 +349,10 @@ pub fn start_server_background_memory(
 #[cfg(test)]
 mod tests {
 
+    use cache::MemorySizable;
     use hyper::header::HeaderValue;
     use hyper::{HeaderMap, StatusCode, Version};
-    use {get_memory_size, CachedResponse};
+    use CachedResponse;
 
     fn example_cache_entry() -> CachedResponse {
         CachedResponse {
@@ -364,14 +366,14 @@ mod tests {
     #[test]
     fn cache_memory_size() {
         let cache_entry = example_cache_entry();
-        assert_eq!(129, get_memory_size(&cache_entry));
+        assert_eq!(129, cache_entry.get_memory_size());
     }
 
     #[test]
     fn body_100_bytes() {
         let mut cache_entry = example_cache_entry();
         cache_entry.body = vec![b'a'; 100];
-        assert_eq!(228, get_memory_size(&cache_entry));
+        assert_eq!(228, cache_entry.get_memory_size());
     }
 
     #[test]
@@ -380,6 +382,6 @@ mod tests {
         cache_entry
             .headers
             .insert("a", HeaderValue::from_static("b"));
-        assert_eq!(131, get_memory_size(&cache_entry));
+        assert_eq!(131, cache_entry.get_memory_size());
     }
 }

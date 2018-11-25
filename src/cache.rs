@@ -62,14 +62,28 @@ extern crate fake_clock;
 #[cfg(test)]
 extern crate rand;
 
-use super::CachedResponse;
 #[cfg(feature = "fake_clock")]
 use fake_clock::FakeClock as Instant;
 use std::borrow::Borrow;
 use std::collections::{btree_map, BTreeMap, VecDeque};
+use std::mem::size_of;
 #[cfg(not(feature = "fake_clock"))]
 use std::time::Instant;
 use std::usize;
+
+/// All values that the cache can store must implement this trait.
+/// Returns the approximate memory size in bytes a cache value takes up.
+pub trait MemorySizable {
+    fn get_memory_size(&self) -> usize;
+}
+
+// This could probably be generic for all primitive types.
+// @todo look up how to specify trait bounds for primitive types.
+impl MemorySizable for usize {
+    fn get_memory_size(&self) -> usize {
+        size_of::<usize>()
+    }
+}
 
 /// An iterator over an `LruCache`'s entries that updates the timestamps as values are traversed.
 pub struct Iter<'a, Key: 'a, Value: 'a> {
@@ -80,6 +94,7 @@ pub struct Iter<'a, Key: 'a, Value: 'a> {
 impl<'a, Key, Value> Iterator for Iter<'a, Key, Value>
 where
     Key: Ord + Clone,
+    Value: MemorySizable,
 {
     type Item = (&'a Key, &'a Value);
 
@@ -131,6 +146,7 @@ pub struct LruCache<Key, Value> {
 impl<Key, Value> LruCache<Key, Value>
 where
     Key: Ord + Clone,
+    Value: MemorySizable,
 {
     /// Constructor for a mmemory constrained cache.
     pub fn with_memory_size(memory_size: usize) -> LruCache<Key, Value> {
@@ -146,15 +162,20 @@ where
     ///
     /// If the key already existed in the cache, the existing value is returned and overwritten in
     /// the cache.  Otherwise, the key-value pair is inserted and `None` is returned.
-    pub fn insert(
-        &mut self,
-        key: Key,
-        value: Value,
-        memory_size: usize,
-        expires: Instant,
-    ) -> Option<Value> {
+    pub fn insert(&mut self, key: Key, value: Value, expires: Instant) -> Option<Value> {
         self.remove_expired();
         let old_value = self.remove(&key);
+
+        // @todo should we also add some bytes for the key size? Oh noes, we
+        // also own the key in self.list so the key will also have to implement
+        // MemorySizable...
+        let memory_size =
+            // Size of the value.
+            value.get_memory_size()
+            // Size of the expiry timestamp.
+            + size_of::<Instant>()
+            // Size of the memory count.
+            + size_of::<usize>();
 
         if memory_size <= self.max_memory_size {
             // Remove old cache entries until we have room to insert the new item.
@@ -315,6 +336,7 @@ where
 #[cfg(test)]
 mod test {
     use super::rand;
+    use std::mem::size_of;
     use std::time::{Duration, Instant};
 
     #[cfg(feature = "fake_clock")]
@@ -342,18 +364,19 @@ mod test {
 
     #[test]
     fn memory_size() {
-        let size = 10usize;
+        // 1x usize value, 1x usize memory size.
+        let size = 10 * (size_of::<usize>() * 2 + size_of::<Instant>());
         let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(size);
 
         for i in 0..10 {
             assert_eq!(lru_cache.len(), i);
-            let _ = lru_cache.insert(i, i, 1, Instant::now() + Duration::from_secs(1000));
+            let _ = lru_cache.insert(i, i, Instant::now() + Duration::from_secs(1000));
             assert_eq!(lru_cache.len(), i + 1);
         }
 
         for i in 10..1000 {
-            let _ = lru_cache.insert(i, i, 1, Instant::now() + Duration::from_secs(1000));
-            assert_eq!(lru_cache.len(), size);
+            let _ = lru_cache.insert(i, i, Instant::now() + Duration::from_secs(1000));
+            assert_eq!(lru_cache.current_memory_size, size);
         }
 
         for _ in (0..1000).rev() {
@@ -366,23 +389,23 @@ mod test {
     #[test]
     fn expiration_time() {
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(100usize);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10000);
 
         for i in 0..10 {
             assert_eq!(lru_cache.len(), i);
-            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
+            let _ = lru_cache.insert(i, i, Instant::now() + time_to_live);
             assert_eq!(lru_cache.len(), i + 1);
         }
 
         sleep(101);
-        let _ = lru_cache.insert(11, 11, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(11, 11, Instant::now() + time_to_live);
 
         assert_eq!(lru_cache.len(), 1);
 
         for i in 0..10 {
             assert!(!lru_cache.is_empty());
             assert_eq!(lru_cache.len(), i + 1);
-            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
+            let _ = lru_cache.insert(i, i, Instant::now() + time_to_live);
             assert_eq!(lru_cache.len(), i + 2);
         }
 
@@ -393,16 +416,18 @@ mod test {
 
     #[test]
     fn time_and_size() {
-        let size = 10usize;
+        let size = 10;
+        // 1x usize value, 1x usize memory size.
+        let memory_size = 10 * (size_of::<usize>() * 2 + size_of::<Instant>());
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(size);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(memory_size);
 
         for i in 0..1000 {
             if i < size {
                 assert_eq!(lru_cache.len(), i);
             }
 
-            let _ = lru_cache.insert(i, i, 1, Instant::now() + time_to_live);
+            let _ = lru_cache.insert(i, i, Instant::now() + time_to_live);
 
             if i < size {
                 assert_eq!(lru_cache.len(), i + 1);
@@ -412,7 +437,7 @@ mod test {
         }
 
         sleep(101);
-        let _ = lru_cache.insert(1, 1, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(1, 1, Instant::now() + time_to_live);
 
         assert_eq!(lru_cache.len(), 1);
     }
@@ -425,9 +450,11 @@ mod test {
     #[test]
     fn time_size_struct_value() {
         let size = 100usize;
+        // 1x usize value, 1x usize memory size.
+        let memory_size = 100 * (size_of::<usize>() * 2 + size_of::<Instant>());
         let time_to_live = Duration::from_millis(100);
 
-        let mut lru_cache = super::LruCache::<Temp, usize>::with_memory_size(size);
+        let mut lru_cache = super::LruCache::<Temp, usize>::with_memory_size(memory_size);
 
         for i in 0..1000 {
             if i < size {
@@ -439,7 +466,6 @@ mod test {
                     id: generate_random_vec::<u8>(64),
                 },
                 i,
-                1,
                 Instant::now() + time_to_live,
             );
 
@@ -456,7 +482,6 @@ mod test {
                 id: generate_random_vec::<u8>(64),
             },
             1,
-            1,
             Instant::now() + time_to_live,
         );
 
@@ -466,11 +491,11 @@ mod test {
     #[test]
     fn peek_iter() {
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10000);
 
-        let _ = lru_cache.insert(0, 0, 1, Instant::now() + time_to_live);
-        let _ = lru_cache.insert(2, 2, 1, Instant::now() + time_to_live);
-        let _ = lru_cache.insert(3, 3, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(0, 0, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(2, 2, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(3, 3, Instant::now() + time_to_live);
 
         sleep(50);
         assert_eq!(
@@ -478,8 +503,8 @@ mod test {
             lru_cache.peek_iter().collect::<Vec<_>>()
         );
         assert_eq!(Some(&2), lru_cache.get(&2));
-        let _ = lru_cache.insert(1, 1, 1, Instant::now() + time_to_live);
-        let _ = lru_cache.insert(4, 4, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(1, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(4, 4, Instant::now() + time_to_live);
 
         sleep(50);
         assert_eq!(
@@ -494,10 +519,10 @@ mod test {
     #[test]
     fn peek_time_check() {
         let time_to_live = Duration::from_millis(100);
-        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10);
+        let mut lru_cache = super::LruCache::<usize, usize>::with_memory_size(10000);
 
         assert_eq!(lru_cache.len(), 0);
-        let _ = lru_cache.insert(0, 0, 1, Instant::now() + time_to_live);
+        let _ = lru_cache.insert(0, 0, Instant::now() + time_to_live);
         assert_eq!(lru_cache.len(), 1);
 
         sleep(50);
@@ -509,11 +534,10 @@ mod test {
 
     #[test]
     fn deref_coercions() {
-        let mut lru_cache = super::LruCache::<String, usize>::with_memory_size(1);
+        let mut lru_cache = super::LruCache::<String, usize>::with_memory_size(100);
         let _ = lru_cache.insert(
             "foo".to_string(),
             0,
-            1,
             Instant::now() + Duration::from_secs(1000),
         );
         assert_eq!(true, lru_cache.contains_key("foo"));
