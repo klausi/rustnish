@@ -1,9 +1,6 @@
 // Copy of main.rs that uses upstream port 9091 instead of 80.
 #![deny(warnings)]
 
-extern crate error_chain;
-extern crate rustnish;
-
 fn main() {
     let port: u16 = 9090;
     let upstream_port: u16 = 9091;

@@ -58,11 +58,6 @@
 )]
 
 #[cfg(feature = "fake_clock")]
-extern crate fake_clock;
-#[cfg(test)]
-extern crate rand;
-
-#[cfg(feature = "fake_clock")]
 use fake_clock::FakeClock as Instant;
 use std::borrow::Borrow;
 use std::collections::{btree_map, BTreeMap, VecDeque};
@@ -335,7 +330,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::rand;
     use std::mem::size_of;
     use std::time::{Duration, Instant};
 

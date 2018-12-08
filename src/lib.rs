@@ -1,15 +1,8 @@
-#[macro_use]
-extern crate error_chain;
-extern crate futures;
-extern crate http;
-extern crate hyper;
-extern crate regex;
-extern crate tokio;
-
-use cache::LruCache;
-use cache::MemorySizable;
-use errors::ResultExt;
-use errors::*;
+use crate::cache::LruCache;
+use crate::cache::MemorySizable;
+use crate::errors::ResultExt;
+use crate::errors::*;
+use error_chain::bail;
 use futures::{Future, Stream};
 use http::Method;
 use hyper::client::HttpConnector;
@@ -32,6 +25,8 @@ use tokio::runtime::Runtime;
 mod cache;
 
 mod errors {
+    use error_chain::*;
+
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {}
 }
@@ -112,7 +107,7 @@ impl Service for Proxy {
                         Version::HTTP_2 => "2.0",
                     };
                     {
-                        let mut headers = response.headers_mut();
+                        let headers = response.headers_mut();
 
                         headers.append(VIA, format!("{} rustnish-0.0.1", version).parse().unwrap());
 
@@ -349,10 +344,10 @@ pub fn start_server_background_memory(
 #[cfg(test)]
 mod tests {
 
-    use cache::MemorySizable;
+    use crate::cache::MemorySizable;
     use hyper::header::HeaderValue;
     use hyper::{HeaderMap, StatusCode, Version};
-    use CachedResponse;
+    use crate::CachedResponse;
 
     fn example_cache_entry() -> CachedResponse {
         CachedResponse {

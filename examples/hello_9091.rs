@@ -1,7 +1,6 @@
 // Copy of the example in Hyper except that we use port 9091.
 
 #![deny(warnings)]
-extern crate hyper;
 
 use hyper::rt::{self, Future};
 use hyper::service::service_fn_ok;

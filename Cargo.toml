@@ -2,6 +2,7 @@
 name = "rustnish"
 version = "0.0.1"
 authors = [ "Klaus Purer <klaus.purer@gmail.com>" ]
+edition = "2018"
 
 [dependencies]
 http = "*"

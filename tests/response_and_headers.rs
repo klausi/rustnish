@@ -1,8 +1,4 @@
-extern crate futures;
-extern crate hyper;
-extern crate rustnish;
-
-use common::echo_request;
+use crate::common::echo_request;
 use futures::{Future, Stream};
 use hyper::header::{HOST, SERVER, VIA};
 use hyper::StatusCode;

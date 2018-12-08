@@ -1,8 +1,4 @@
-extern crate futures;
-extern crate hyper;
-extern crate tokio;
-
-use common::tokio::runtime::Runtime;
+use tokio::runtime::Runtime;
 use futures::Future;
 use hyper::service::service_fn_ok;
 use hyper::{Body, Request, Response};
