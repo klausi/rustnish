@@ -134,7 +134,7 @@ fn session_cookie_bypass() {
 }
 
 // Tests that a very small cache of 10 bytes can never hold an HTTP response.
-/*#[test]
+#[test]
 fn insufficient_cache_size() {
     let port = common::get_free_port();
     let upstream_port = common::get_free_port();
@@ -160,4 +160,4 @@ fn insufficient_cache_size() {
     // We must not get a cached response because the cache is too small.
     let response2 = common::client_get(url);
     assert_eq!(response2.status(), StatusCode::BAD_GATEWAY);
-}*/
+}

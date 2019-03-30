@@ -285,7 +285,7 @@ pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
 }
 
 pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime> {
-    // 256 MB memory cahce as a default.
+    // 256 MB memory cache as a default.
     start_server_background_memory(port, upstream_port, 256 * 1024 * 1024)
 }
 
