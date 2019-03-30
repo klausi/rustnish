@@ -347,7 +347,7 @@ mod test {
 
     fn generate_random_vec<T>(len: usize) -> Vec<T>
     where
-        T: rand::Rand,
+        rand::distributions::Standard: rand::distributions::Distribution<T>,
     {
         let mut vec = Vec::<T>::with_capacity(len);
         for _ in 0..len {

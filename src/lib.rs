@@ -345,9 +345,9 @@ pub fn start_server_background_memory(
 mod tests {
 
     use crate::cache::MemorySizable;
+    use crate::CachedResponse;
     use hyper::header::HeaderValue;
     use hyper::{HeaderMap, StatusCode, Version};
-    use crate::CachedResponse;
 
     fn example_cache_entry() -> CachedResponse {
         CachedResponse {

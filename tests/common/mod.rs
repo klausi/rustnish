@@ -1,10 +1,10 @@
-use tokio::runtime::Runtime;
 use futures::Future;
 use hyper::service::service_fn_ok;
 use hyper::{Body, Request, Response};
 use hyper::{Client, Server, Uri};
 use std::str;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use tokio::runtime::Runtime;
 
 // Return the received request in the response body for testing purposes.
 pub fn echo_request(request: Request<Body>) -> Response<Body> {
