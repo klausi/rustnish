@@ -3,6 +3,8 @@ use crate::cache::MemorySizable;
 use crate::errors::ResultExt;
 use crate::errors::*;
 use error_chain::bail;
+#[cfg(test)]
+use fake_clock::FakeClock as Instant;
 use futures::{Future, Stream};
 use http::Method;
 use hyper::client::HttpConnector;
@@ -18,7 +20,9 @@ use regex::Regex;
 use std::mem::size_of_val;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(not(test))]
+use std::time::Instant;
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 

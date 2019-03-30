@@ -15,3 +15,4 @@ regex = ">=1"
 [dev-dependencies]
 tokio-core = ">=0.1.8"
 rand = ">=0.4.1"
+fake_clock = ">=0.3"

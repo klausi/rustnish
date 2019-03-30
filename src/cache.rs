@@ -57,12 +57,13 @@
     dead_code
 )]
 
-#[cfg(feature = "fake_clock")]
+// During testing we use a mock clock to be time independent.
+#[cfg(test)]
 use fake_clock::FakeClock as Instant;
 use std::borrow::Borrow;
 use std::collections::{btree_map, BTreeMap, VecDeque};
 use std::mem::size_of;
-#[cfg(not(feature = "fake_clock"))]
+#[cfg(not(test))]
 use std::time::Instant;
 use std::usize;
 
@@ -330,19 +331,13 @@ where
 
 #[cfg(test)]
 mod test {
+    use fake_clock::FakeClock as Instant;
     use std::mem::size_of;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
-    #[cfg(feature = "fake_clock")]
     fn sleep(time: u64) {
         use fake_clock::FakeClock;
         FakeClock::advance_time(time);
-    }
-
-    #[cfg(not(feature = "fake_clock"))]
-    fn sleep(time: u64) {
-        use std::thread;
-        thread::sleep(Duration::from_millis(time));
     }
 
     fn generate_random_vec<T>(len: usize) -> Vec<T>
@@ -500,7 +495,7 @@ mod test {
         let _ = lru_cache.insert(1, 1, Instant::now() + time_to_live);
         let _ = lru_cache.insert(4, 4, Instant::now() + time_to_live);
 
-        sleep(50);
+        sleep(51);
         assert_eq!(
             vec![(&1, &1), (&4, &4)],
             lru_cache.peek_iter().collect::<Vec<_>>()
@@ -522,7 +517,7 @@ mod test {
         sleep(50);
         assert_eq!(Some(&0), lru_cache.get(&0));
         assert_eq!(Some(&0), lru_cache.peek(&0));
-        sleep(50);
+        sleep(51);
         assert_eq!(None, lru_cache.peek(&0));
     }
 
