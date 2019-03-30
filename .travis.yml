@@ -1,19 +1,11 @@
 language: rust
 cache: cargo
-dist: trusty
+dist: xenial
 os:
   - linux
   - osx
 sudo: false
 
-# Run builds for all the supported trains
+# We only care about the latest stable release of Rust.
 rust:
-  - nightly
   - stable
-
-# OSX with Rust nightly fails because of cargo cache error
-# "error: failed to remove: /Users/travis/build/klausi/rustnish/target/debug/rustnish.dSYM"
-matrix:
-  allow_failures:
-    - os: osx
-      rust: nightly
