@@ -103,7 +103,7 @@ No, because Rust compiles each [integration test](https://doc.rust-lang.org/rust
 So far so good, but there are some downsides to consider with this approach:
 
 * You can only swap in one mock implementation for all your test cases. Every test case shares the same mock code, so you need to come up with your own strategy if you need different mock behavior per test case.
-* Integration tests become more import to have in addition to unit tests. The unit tests run with a complete fake type, so you don't even know if your code still compiles with the real type.
+* Integration tests become more important to have in addition to unit tests. The unit tests run with a complete fake type, so you don't even know if your code still compiles with the real type.
 * If we would not have the fake_clock crate then we would have to write all the mock code ourselves, which is not trivial. This is probably the nature of mocking in general: complex type usage results in complex mock code to replace it.
 
 As you can see there is great overlap with the general challenges of mocking, so don't take these as arguments against conditional compilation mocks specifically.
@@ -111,7 +111,7 @@ As you can see there is great overlap with the general challenges of mocking, so
 
 ## Conclusion
 
-Rust is super flexible and powerful on the topic of mocking. Conditional compilation is a next level opportunity that is simply missing in other programming languages.
+Rust is super flexible and powerful on the topic of mocking. Conditional compilation is a next level opportunity that is simply missing in other programming languages. HTTP request mocking libraries such as [Mockito](https://github.com/lipanski/mockito) are beginning to leverage this.
 
 But there are also maturity problems:
 * There are 7 competing mocking frameworks, a sign that the Rust ecosystem has not figured out yet how to do it effectively for everybody.
