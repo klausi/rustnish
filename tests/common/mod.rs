@@ -3,7 +3,7 @@ use hyper::service::service_fn_ok;
 use hyper::{Body, Request, Response};
 use hyper::{Client, Server, Uri};
 use std::str;
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::runtime::Runtime;
 
 // Return the received request in the response body for testing purposes.
@@ -69,7 +69,7 @@ pub fn client_request(request: Request<Body>) -> Response<Body> {
 // Returns a local port number that has not been used yet in parallel test
 // threads.
 pub fn get_free_port() -> u16 {
-    static PORT_NR: AtomicUsize = ATOMIC_USIZE_INIT;
+    static PORT_NR: AtomicUsize = AtomicUsize::new(0);
 
     PORT_NR.fetch_add(1, Ordering::SeqCst) as u16 + 9090
 }

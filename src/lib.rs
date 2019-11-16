@@ -48,7 +48,7 @@ impl Service for Proxy {
     type ReqBody = Body;
     type ResBody = Body;
     type Error = hyper::Error;
-    type Future = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+    type Future = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
     fn call(&mut self, mut request: Request<Body>) -> Self::Future {
         let cache_key = self.cache.cache_key(&request);
