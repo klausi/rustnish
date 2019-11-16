@@ -5,17 +5,17 @@ use crate::errors::*;
 use error_chain::bail;
 #[cfg(test)]
 use fake_clock::FakeClock as Instant;
-use futures::{Future, Stream};
+use futures::executor::block_on;
+use futures_util::try_stream::TryStreamExt;
 use http::Method;
-use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
 use hyper::header::{HeaderValue, CACHE_CONTROL, COOKIE, SERVER, VIA};
-use hyper::server::conn::Http;
-use hyper::service::Service;
-use hyper::Client;
+use hyper::server::conn::AddrStream;
+use hyper::service::{make_service_fn, service_fn};
 use hyper::StatusCode;
 use hyper::Version;
-use hyper::{Body, HeaderMap, Request, Response};
+use hyper::{Body, HeaderMap, Request, Response, Result};
+use hyper::{Client, Error, Server};
 use regex::Regex;
 use std::mem::size_of_val;
 use std::net::SocketAddr;
@@ -23,8 +23,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 #[cfg(not(test))]
 use std::time::Instant;
-use tokio::net::TcpListener;
-use tokio::runtime::Runtime;
 
 mod cache;
 
@@ -33,109 +31,6 @@ mod errors {
 
     // Create the Error, ErrorKind, ResultExt, and Result types
     error_chain! {}
-}
-
-struct Proxy {
-    port: u16,
-    upstream_port: u16,
-    client: Client<HttpConnector>,
-    // The socket address the original request is coming from.
-    source_address: SocketAddr,
-    cache: Cache,
-}
-
-impl Service for Proxy {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = hyper::Error;
-    type Future = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
-
-    fn call(&mut self, mut request: Request<Body>) -> Self::Future {
-        let cache_key = self.cache.cache_key(&request);
-
-        if let Some(response) = self.cache.lookup(&cache_key) {
-            return Box::new(futures::future::ok(response));
-        }
-
-        let upstream_uri = {
-            // 127.0.0.1 is hard coded here for now because we assume that upstream
-            // is on the same host. Should be made configurable later.
-            let mut upstream_uri = format!(
-                "http://127.0.0.1:{}{}",
-                self.upstream_port,
-                request.uri().path()
-            );
-            if let Some(query) = request.uri().query() {
-                upstream_uri.push('?');
-                upstream_uri.push_str(query);
-            }
-            match upstream_uri.parse() {
-                Ok(u) => u,
-                _ => {
-                    // We can't actually test this because parsing the URI never
-                    // fails. However, should that change at any point this is the
-                    // right thing to do.
-                    return Box::new(futures::future::ok(
-                        Response::builder()
-                            .status(StatusCode::BAD_REQUEST)
-                            .body("Invalid upstream URI".into())
-                            .unwrap(),
-                    ));
-                }
-            }
-        };
-
-        *request.uri_mut() = upstream_uri;
-
-        {
-            let headers = request.headers_mut();
-            headers.append(
-                HeaderName::from_static("x-forwarded-for"),
-                self.source_address.ip().to_string().parse().unwrap(),
-            );
-            headers.append(
-                HeaderName::from_static("x-forwarded-port"),
-                self.port.to_string().parse().unwrap(),
-            );
-        }
-
-        let mut cloned_cache = self.cache.clone();
-
-        Box::new(self.client.request(request).then(move |result| {
-            let our_response = match result {
-                Ok(mut response) => {
-                    let version = match response.version() {
-                        Version::HTTP_09 => "0.9",
-                        Version::HTTP_10 => "1.0",
-                        Version::HTTP_11 => "1.1",
-                        Version::HTTP_2 => "2.0",
-                    };
-                    {
-                        let headers = response.headers_mut();
-
-                        headers.append(VIA, format!("{} rustnish-0.0.1", version).parse().unwrap());
-
-                        // Append a "Server" header if not already present.
-                        if !headers.contains_key(SERVER) {
-                            headers.insert(SERVER, "rustnish".parse().unwrap());
-                        }
-                    }
-
-                    // Put the response into the cache if possible.
-                    cloned_cache.store(cache_key, response)
-                }
-                Err(_) => {
-                    // For security reasons do not show the exact error to end users.
-                    // @todo Log the error.
-                    Response::builder()
-                        .status(StatusCode::BAD_GATEWAY)
-                        .body("Something went wrong, please try again later.".into())
-                        .unwrap()
-                }
-            };
-            futures::future::ok(our_response)
-        }))
-    }
 }
 
 struct CachedResponse {
@@ -222,7 +117,7 @@ impl Cache {
                         // consume it, clone it and rebuild it. Super ugly, any better
                         // ideas?
                         let (header_part, body) = response.into_parts();
-                        let body_bytes = body.concat2().wait().unwrap().to_vec();
+                        let body_bytes = response.body_mut().try_concat();
 
                         let mut inner_cache = self.lru_cache.lock().unwrap();
                         let entry = CachedResponse {
@@ -231,7 +126,7 @@ impl Cache {
                             headers: header_part.headers.clone(),
                             body: body_bytes.clone(),
                         };
-                        // Store an expiry date for this repsponse. After
+                        // Store an expiry date for this response. After
                         // that point in time we need to discard it.
                         inner_cache.insert(
                             key,
@@ -279,70 +174,129 @@ impl Cache {
     }
 }
 
-pub fn start_server_blocking(port: u16, upstream_port: u16) -> Result<()> {
-    let runtime = start_server_background(port, upstream_port)
-        .chain_err(|| "Spawning server thread failed")?;
-
-    runtime.shutdown_on_idle().wait().unwrap();
-
-    bail!("The server thread finished unexpectedly");
-}
-
-pub fn start_server_background(port: u16, upstream_port: u16) -> Result<Runtime> {
+pub fn start_server_blocking(port: u16, upstream_port: u16) {
     // 256 MB memory cache as a default.
-    start_server_background_memory(port, upstream_port, 256 * 1024 * 1024)
+    start_server_background_memory(port, upstream_port, 256 * 1024 * 1024);
 }
 
-pub fn start_server_background_memory(
+pub async fn start_server_background_memory(
     port: u16,
     upstream_port: u16,
     memory_size: usize,
-) -> Result<Runtime> {
+) -> Result<()> {
     let address: SocketAddr = ([127, 0, 0, 1], port).into();
-    let mut runtime = Runtime::new().unwrap();
 
-    // We can't use Http::new().bind() because we need to pass down the
-    // remote source IP address to our proxy service. So we need to
-    // create a TCP listener ourselves and handle each connection to
-    // have access to the source IP address.
-    // @todo Simplify this once Hyper has a better API to handle IP
-    // addresses.
-    let listener = TcpListener::bind(&address)
-        .chain_err(|| format!("Failed to bind server to address {}", address))?;
-    let client = Client::new();
-    let http = Http::new();
+    let client_main = Client::new();
 
     let inner_cache = LruCache::<String, CachedResponse>::with_memory_size(memory_size);
-    let cache = Cache {
+    let cache_main = Cache {
         lru_cache: Arc::new(Mutex::new(inner_cache)),
     };
 
-    let server = listener
-        .incoming()
-        .for_each(move |socket| {
-            let source_address = socket.peer_addr().unwrap();
-            tokio::spawn(
-                http.serve_connection(
-                    socket,
-                    Proxy {
-                        port,
-                        upstream_port,
-                        client: client.clone(),
-                        source_address,
-                        cache: cache.clone(),
-                    },
-                )
-                .map(|_| ())
-                .map_err(|_| ()),
-            );
-            Ok(())
-        })
-        .map_err(|e| panic!("accept error: {}", e));
+    // The closure inside `make_service_fn` is run for each connection,
+    // creating a 'service' to handle requests for that specific connection.
+    let make_service = make_service_fn(move |socket: &AddrStream| {
+        let remote_addr = socket.remote_addr();
+        let client = client_main.clone();
+        let cache = cache_main.clone();
+
+        async move {
+            // This is the `Service` that will handle the connection.
+            // `service_fn` is a helper to convert a function that
+            // returns a Response into a `Service`.
+            Ok::<_, Error>(service_fn(move |mut request: Request<Body>| {
+                async move {
+                    let cache_key = cache.cache_key(&request);
+
+                    if let Some(response) = cache.lookup(&cache_key) {
+                        return Ok(response);
+                    }
+
+                    let upstream_uri = {
+                        // 127.0.0.1 is hard coded here for now because we assume that upstream
+                        // is on the same host. Should be made configurable later.
+                        let mut upstream_uri =
+                            format!("http://127.0.0.1:{}{}", upstream_port, request.uri().path());
+                        if let Some(query) = request.uri().query() {
+                            upstream_uri.push('?');
+                            upstream_uri.push_str(query);
+                        }
+                        match upstream_uri.parse() {
+                            Ok(u) => u,
+                            _ => {
+                                // We can't actually test this because parsing the URI never
+                                // fails. However, should that change at any point this is the
+                                // right thing to do.
+                                return Ok(Response::builder()
+                                    .status(StatusCode::BAD_REQUEST)
+                                    .body("Invalid upstream URI".into())
+                                    .unwrap());
+                            }
+                        }
+                    };
+
+                    *request.uri_mut() = upstream_uri;
+
+                    {
+                        let headers = request.headers_mut();
+                        headers.append(
+                            HeaderName::from_static("x-forwarded-for"),
+                            remote_addr.ip().to_string().parse().unwrap(),
+                        );
+                        headers.append(
+                            HeaderName::from_static("x-forwarded-port"),
+                            port.to_string().parse().unwrap(),
+                        );
+                    }
+
+                    let mut cloned_cache = cache.clone();
+
+                    let result = client.request(request).await;
+                    let our_response = match result {
+                        Ok(mut response) => {
+                            let version = match response.version() {
+                                Version::HTTP_09 => "0.9",
+                                Version::HTTP_10 => "1.0",
+                                Version::HTTP_11 => "1.1",
+                                Version::HTTP_2 => "2.0",
+                            };
+                            {
+                                let headers = response.headers_mut();
+
+                                headers.append(
+                                    VIA,
+                                    format!("{} rustnish-0.0.1", version).parse().unwrap(),
+                                );
+
+                                // Append a "Server" header if not already present.
+                                if !headers.contains_key(SERVER) {
+                                    headers.insert(SERVER, "rustnish".parse().unwrap());
+                                }
+                            }
+
+                            // Put the response into the cache if possible.
+                            cloned_cache.store(cache_key, response)
+                        }
+                        Err(_) => {
+                            // For security reasons do not show the exact error to end users.
+                            // @todo Log the error.
+                            Response::builder()
+                                .status(StatusCode::BAD_GATEWAY)
+                                .body("Something went wrong, please try again later.".into())
+                                .unwrap()
+                        }
+                    };
+                    Ok::<_, Error>(our_response)
+                }
+            }))
+        }
+    });
+
+    let server = Server::bind(&address).serve(make_service);
 
     println!("Listening on http://{}", address);
-    runtime.spawn(server);
 
-    Ok(runtime)
+    server.await
 }
 
 #[cfg(test)]
