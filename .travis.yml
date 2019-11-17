@@ -1,6 +1,6 @@
 language: rust
 cache: cargo
-dist: xenial
+dist: bionic
 os:
   - linux
   - osx
@@ -9,3 +9,6 @@ sudo: false
 # We only care about the latest stable release of Rust.
 rust:
   - stable
+
+env:
+  - RUST_BACKTRACE=1
