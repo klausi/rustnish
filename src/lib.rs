@@ -10,12 +10,12 @@ use http::Method;
 use hyper::client::HttpConnector;
 use hyper::header::HeaderName;
 use hyper::header::{HeaderValue, CACHE_CONTROL, COOKIE, SERVER, VIA};
-use hyper::server::conn::Http;
-use hyper::service::Service;
+use hyper::server::conn::AddrStream;
+use hyper::service::{make_service_fn, service_fn};
 use hyper::Client;
 use hyper::StatusCode;
 use hyper::Version;
-use hyper::{Body, HeaderMap, Request, Response};
+use hyper::{Body, HeaderMap, Request, Response, Server};
 use regex::Regex;
 use std::mem::size_of_val;
 use std::net::SocketAddr;
@@ -23,7 +23,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 #[cfg(not(test))]
 use std::time::Instant;
-use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
 
 mod cache;
@@ -35,107 +34,95 @@ mod errors {
     error_chain! {}
 }
 
-struct Proxy {
+fn proxy_request(
+    mut request: Request<Body>,
+    source_address: SocketAddr,
     port: u16,
     upstream_port: u16,
-    client: Client<HttpConnector>,
-    // The socket address the original request is coming from.
-    source_address: SocketAddr,
-    cache: Cache,
-}
+    client: &Client<HttpConnector>,
+    mut cache: Cache,
+) -> Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send> {
+    let cache_key = cache.cache_key(&request);
 
-impl Service for Proxy {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = hyper::Error;
-    type Future = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+    if let Some(response) = cache.lookup(&cache_key) {
+        return Box::new(futures::future::ok(response));
+    }
 
-    fn call(&mut self, mut request: Request<Body>) -> Self::Future {
-        let cache_key = self.cache.cache_key(&request);
-
-        if let Some(response) = self.cache.lookup(&cache_key) {
-            return Box::new(futures::future::ok(response));
+    let upstream_uri = {
+        // 127.0.0.1 is hard coded here for now because we assume that upstream
+        // is on the same host. Should be made configurable later.
+        let mut upstream_uri =
+            format!("http://127.0.0.1:{}{}", upstream_port, request.uri().path());
+        if let Some(query) = request.uri().query() {
+            upstream_uri.push('?');
+            upstream_uri.push_str(query);
         }
-
-        let upstream_uri = {
-            // 127.0.0.1 is hard coded here for now because we assume that upstream
-            // is on the same host. Should be made configurable later.
-            let mut upstream_uri = format!(
-                "http://127.0.0.1:{}{}",
-                self.upstream_port,
-                request.uri().path()
-            );
-            if let Some(query) = request.uri().query() {
-                upstream_uri.push('?');
-                upstream_uri.push_str(query);
+        match upstream_uri.parse() {
+            Ok(u) => u,
+            _ => {
+                // We can't actually test this because parsing the URI never
+                // fails. However, should that change at any point this is the
+                // right thing to do.
+                return Box::new(futures::future::ok(
+                    Response::builder()
+                        .status(StatusCode::BAD_REQUEST)
+                        .body("Invalid upstream URI".into())
+                        .unwrap(),
+                ));
             }
-            match upstream_uri.parse() {
-                Ok(u) => u,
-                _ => {
-                    // We can't actually test this because parsing the URI never
-                    // fails. However, should that change at any point this is the
-                    // right thing to do.
-                    return Box::new(futures::future::ok(
-                        Response::builder()
-                            .status(StatusCode::BAD_REQUEST)
-                            .body("Invalid upstream URI".into())
-                            .unwrap(),
-                    ));
+        }
+    };
+
+    *request.uri_mut() = upstream_uri;
+
+    {
+        let headers = request.headers_mut();
+        headers.append(
+            HeaderName::from_static("x-forwarded-for"),
+            source_address.ip().to_string().parse().unwrap(),
+        );
+        headers.append(
+            HeaderName::from_static("x-forwarded-port"),
+            port.to_string().parse().unwrap(),
+        );
+    }
+
+    let mut cloned_cache = cache.clone();
+
+    Box::new(client.request(request).then(move |result| {
+        let our_response = match result {
+            Ok(mut response) => {
+                let version = match response.version() {
+                    Version::HTTP_09 => "0.9",
+                    Version::HTTP_10 => "1.0",
+                    Version::HTTP_11 => "1.1",
+                    Version::HTTP_2 => "2.0",
+                };
+                {
+                    let headers = response.headers_mut();
+
+                    headers.append(VIA, format!("{} rustnish-0.0.1", version).parse().unwrap());
+
+                    // Append a "Server" header if not already present.
+                    if !headers.contains_key(SERVER) {
+                        headers.insert(SERVER, "rustnish".parse().unwrap());
+                    }
                 }
+
+                // Put the response into the cache if possible.
+                cloned_cache.store(cache_key, response)
+            }
+            Err(_) => {
+                // For security reasons do not show the exact error to end users.
+                // @todo Log the error.
+                Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .body("Something went wrong, please try again later.".into())
+                    .unwrap()
             }
         };
-
-        *request.uri_mut() = upstream_uri;
-
-        {
-            let headers = request.headers_mut();
-            headers.append(
-                HeaderName::from_static("x-forwarded-for"),
-                self.source_address.ip().to_string().parse().unwrap(),
-            );
-            headers.append(
-                HeaderName::from_static("x-forwarded-port"),
-                self.port.to_string().parse().unwrap(),
-            );
-        }
-
-        let mut cloned_cache = self.cache.clone();
-
-        Box::new(self.client.request(request).then(move |result| {
-            let our_response = match result {
-                Ok(mut response) => {
-                    let version = match response.version() {
-                        Version::HTTP_09 => "0.9",
-                        Version::HTTP_10 => "1.0",
-                        Version::HTTP_11 => "1.1",
-                        Version::HTTP_2 => "2.0",
-                    };
-                    {
-                        let headers = response.headers_mut();
-
-                        headers.append(VIA, format!("{} rustnish-0.0.1", version).parse().unwrap());
-
-                        // Append a "Server" header if not already present.
-                        if !headers.contains_key(SERVER) {
-                            headers.insert(SERVER, "rustnish".parse().unwrap());
-                        }
-                    }
-
-                    // Put the response into the cache if possible.
-                    cloned_cache.store(cache_key, response)
-                }
-                Err(_) => {
-                    // For security reasons do not show the exact error to end users.
-                    // @todo Log the error.
-                    Response::builder()
-                        .status(StatusCode::BAD_GATEWAY)
-                        .body("Something went wrong, please try again later.".into())
-                        .unwrap()
-                }
-            };
-            futures::future::ok(our_response)
-        }))
-    }
+        futures::future::ok(our_response)
+    }))
 }
 
 struct CachedResponse {
@@ -301,43 +288,34 @@ pub fn start_server_background_memory(
     let address: SocketAddr = ([127, 0, 0, 1], port).into();
     let mut runtime = Runtime::new().unwrap();
 
-    // We can't use Http::new().bind() because we need to pass down the
-    // remote source IP address to our proxy service. So we need to
-    // create a TCP listener ourselves and handle each connection to
-    // have access to the source IP address.
-    // @todo Simplify this once Hyper has a better API to handle IP
-    // addresses.
-    let listener = TcpListener::bind(&address)
-        .chain_err(|| format!("Failed to bind server to address {}", address))?;
     let client = Client::new();
-    let http = Http::new();
 
     let inner_cache = LruCache::<String, CachedResponse>::with_memory_size(memory_size);
     let cache = Cache {
         lru_cache: Arc::new(Mutex::new(inner_cache)),
     };
 
-    let server = listener
-        .incoming()
-        .for_each(move |socket| {
-            let source_address = socket.peer_addr().unwrap();
-            tokio::spawn(
-                http.serve_connection(
-                    socket,
-                    Proxy {
-                        port,
-                        upstream_port,
-                        client: client.clone(),
-                        source_address,
-                        cache: cache.clone(),
-                    },
-                )
-                .map(|_| ())
-                .map_err(|_| ()),
-            );
-            Ok(())
+    let make_service = make_service_fn(move |socket: &AddrStream| {
+        let source_address = socket.remote_addr();
+        let client = client.clone();
+        let cache = cache.clone();
+
+        service_fn(move |request| {
+            proxy_request(
+                request,
+                source_address,
+                port,
+                upstream_port,
+                &client,
+                cache.clone(),
+            )
         })
-        .map_err(|e| panic!("accept error: {}", e));
+    });
+
+    let server = Server::try_bind(&address)
+        .chain_err(|| format!("Failed to bind server to address {}", address))?
+        .serve(make_service)
+        .map_err(|e| eprintln!("server error: {}", e));
 
     println!("Listening on http://{}", address);
     runtime.spawn(server);

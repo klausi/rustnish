@@ -103,10 +103,14 @@ fn port_occupied() {
         second.to_string(),
         format!("Failed to bind server to address 127.0.0.1:{}", port)
     );
-    let third = iter.next().unwrap();
+    let _third = iter.next();
+    let fourth = iter.next().unwrap();
     // The exact error code is different on Linux and MacOS, so we test just for
     // the beginning of the error message.
-    assert_eq!(&third.to_string()[..32], "Address already in use (os error");
+    assert_eq!(
+        &fourth.to_string()[..32],
+        "Address already in use (os error"
+    );
 }
 
 // Tests that POST requests are also passed through.
